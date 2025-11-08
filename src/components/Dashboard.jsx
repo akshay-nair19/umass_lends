@@ -1,7 +1,6 @@
 import React from 'react';
 import { UserAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import ApiTest from './ApiTest';
 
 
 const Dashboard = () => {
@@ -59,11 +58,6 @@ const Dashboard = () => {
                         <p className="text-umass-gray">List a new item</p>
                     </Link>
                 </div>
-            </div>
-            
-            {/* API Test Panel (for testing) */}
-            <div className="border-t">
-                <ApiTest />
             </div>
         </div>
     )

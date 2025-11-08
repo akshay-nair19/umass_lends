@@ -54,3 +54,6 @@ logs
 
 # env
 *.env
+
+# test/development files
+src/components/ApiTest.jsx
