@@ -1,93 +1,110 @@
 # Fix: Blank Page Issue
 
-## 🐛 Problem
+## ✅ What I Fixed
 
-The page is blank because **environment variables are missing** for Vite.
+### Problem
+The Navbar component was being rendered **outside** the RouterProvider, which meant it couldn't use router hooks like `useNavigate` and `Link`. This caused React Router to fail silently, resulting in a blank page.
 
-## ✅ Solution
+### Solution
+1. Created a `Layout` component that wraps all routes
+2. Moved Navbar inside the Layout (so it's inside RouterProvider)
+3. Used `<Outlet />` to render child routes
+4. Removed Navbar from `main.jsx`
 
-### Step 1: Add Missing Environment Variables
+## 🔍 Check Browser Console
 
-Your `.env` file has:
-- ✅ `NEXT_PUBLIC_SUPABASE_URL` (for Next.js backend)
-- ❌ `VITE_SUPABASE_URL` (MISSING - needed for Vite frontend)
-- ❌ `VITE_SUPABASE_ANON_KEY` (MISSING - needed for Vite frontend)
+If the page is still blank, check the browser console (F12) for errors:
 
-### Step 2: Update .env File
+1. **Open DevTools** (F12)
+2. **Go to Console tab**
+3. **Look for errors**
 
-Add these lines to your `.env` file (use the SAME values as NEXT_PUBLIC_ ones):
+Common errors:
+- `Cannot read property 'user' of undefined` - Session issue
+- `Failed to fetch` - Backend not running
+- `Cannot find module` - Missing import
+- `useNavigate must be used within a Router` - Router issue (should be fixed now)
 
-```env
-# Existing (for Next.js backend)
-NEXT_PUBLIC_SUPABASE_URL=https://dtafbloenfczcjzllizs.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-NODE_ENV=development
+## 🚀 Steps to Fix
 
-# ADD THESE (for Vite frontend - same values!)
-VITE_SUPABASE_URL=https://dtafbloenfczcjzllizs.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0YWZibG9lbmZjemNqemxsaXpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI1Njc0NDQsImV4cCI6MjA3ODE0MzQ0NH0._Fk5_JE7oXPBl2PegghVOKe5LMEI_k1OeqthR8Garuw
+### Step 1: Restart Frontend
+```bash
+# Stop frontend (Ctrl+C)
+# Then restart:
+npm run dev:frontend
 ```
 
-### Step 3: Restart Vite Server
+### Step 2: Check Browser Console
+Open browser console and look for errors.
 
-**Important**: After adding environment variables, you MUST restart the Vite server!
+### Step 3: Check Network Tab
+1. Open DevTools (F12)
+2. Go to Network tab
+3. Refresh page
+4. Look for failed requests (red)
 
-1. **Stop the server** (Ctrl+C in the terminal)
-2. **Start it again**: `npm run dev:frontend`
+### Step 4: Verify Backend is Running
+```bash
+# Make sure backend is running:
+npm run dev:backend
+```
 
-### Step 4: Check Browser Console
+### Step 5: Test Direct URL
+Try accessing: `http://localhost:5174/`
 
-1. Open browser DevTools (F12)
-2. Go to Console tab
-3. You should see errors if env variables are still missing
-4. The error will tell you exactly what's wrong
+## 🐛 Common Issues
 
----
+### Issue 1: JavaScript Errors
+**Symptom**: Blank page, errors in console
+**Fix**: Check console for specific error and fix it
 
-## 🔍 Why This Happens
+### Issue 2: Backend Not Running
+**Symptom**: API calls failing, "Failed to fetch" errors
+**Fix**: Start backend with `npm run dev:backend`
 
-- **Next.js** uses `NEXT_PUBLIC_` prefix for environment variables
-- **Vite** uses `VITE_` prefix for environment variables
-- They need to be set separately, even though they have the same values
+### Issue 3: CORS Errors
+**Symptom**: CORS errors in console
+**Fix**: Make sure backend has CORS headers (already added)
 
----
+### Issue 4: Missing Dependencies
+**Symptom**: "Cannot find module" errors
+**Fix**: Run `npm install`
 
-## ✅ Quick Fix
+### Issue 5: Session Errors
+**Symptom**: Errors about `session.user`
+**Fix**: Check AuthContext is working, check session structure
 
-1. **Open `.env` file**
-2. **Add these lines** (copy the values from NEXT_PUBLIC_ ones):
-   ```env
-   VITE_SUPABASE_URL=https://dtafbloenfczcjzllizs.supabase.co
-   VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0YWZibG9lbmZjemNqemxsaXpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI1Njc0NDQsImV4cCI6MjA3ODE0MzQ0NH0._Fk5_JE7oXPBl2PegghVOKe5LMEI_k1OeqthR8Garuw
-   ```
-3. **Save the file**
-4. **Restart Vite server**: Stop and run `npm run dev:frontend` again
-5. **Refresh browser**
+## ✅ Verification
 
----
+After fixing, you should see:
+1. ✅ Navbar at the top
+2. ✅ Home page content
+3. ✅ No errors in console
+4. ✅ API calls working (check Network tab)
 
-## 🧪 Verify It's Working
+## 🔧 If Still Blank
 
-After adding the env variables and restarting:
+1. **Check console** for specific errors
+2. **Check Network tab** for failed requests
+3. **Verify backend is running**
+4. **Check if items are loading** (might be empty, but page should show)
+5. **Try a different route** like `/signin`
 
-1. **Check browser console** (F12) - should have no errors
-2. **Page should load** - you should see "UMass Lends Login" heading
-3. **Can navigate** - try going to `/signin` or `/signup`
+## 📋 Quick Checklist
 
----
+- [ ] Frontend server is running
+- [ ] Backend server is running
+- [ ] No errors in browser console
+- [ ] No failed requests in Network tab
+- [ ] Can see Navbar (if page loads)
+- [ ] Can navigate to `/signin` (test if routing works)
 
-## 💡 Pro Tip
+## 💡 Debug Steps
 
-If you still see a blank page after adding env variables:
+1. **Open browser console** (F12)
+2. **Check for errors** - Look for red error messages
+3. **Check Network tab** - See if API calls are working
+4. **Try different routes** - `/signin`, `/signup`
+5. **Check React DevTools** - See if components are rendering
 
-1. **Hard refresh browser**: Ctrl+Shift+R (Windows) or Cmd+Shift+R (Mac)
-2. **Clear browser cache**
-3. **Check console** for specific error messages
-4. **Verify env variables** are actually loaded:
-   ```javascript
-   // In browser console
-   console.log(import.meta.env.VITE_SUPABASE_URL);
-   ```
-   Should show your Supabase URL, not `undefined`
-
+If you see specific errors, share them and I can help fix them!
