@@ -19,8 +19,35 @@ const CountdownTimer = ({ endDate, label = 'Time remaining' }) => {
 
     const calculateTimeRemaining = () => {
       const now = new Date().getTime();
-      const end = new Date(endDate).getTime();
-      const difference = end - now;
+      
+      // Parse endDate - handle both UTC (with Z) and local time (without Z)
+      let endTime;
+      if (endDate.includes('Z') || endDate.match(/[+-]\d{2}:\d{2}$/)) {
+        // It's UTC or has timezone offset
+        endTime = new Date(endDate).getTime();
+      } else {
+        // It's a local time string (YYYY-MM-DDTHH:mm:ss)
+        // Parse it as local time to avoid timezone conversion
+        const match = endDate.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+        if (match) {
+          const [, year, month, day, hour, minute, second] = match;
+          // Create Date object using local time constructor
+          const localEndDate = new Date(
+            parseInt(year),
+            parseInt(month) - 1,
+            parseInt(day),
+            parseInt(hour),
+            parseInt(minute),
+            parseInt(second || 0)
+          );
+          endTime = localEndDate.getTime();
+        } else {
+          // Fallback: try parsing as-is
+          endTime = new Date(endDate).getTime();
+        }
+      }
+      
+      const difference = endTime - now;
 
       if (difference <= 0) {
         setTimeRemaining({
@@ -94,7 +121,39 @@ const CountdownTimer = ({ endDate, label = 'Time remaining' }) => {
         </div>
       </div>
       <p className="text-xs text-gray-500 mt-2">
-        Return by: {new Date(endDate).toLocaleString()}
+        Return by: {(() => {
+          // Parse endDate for display - handle both UTC and local time
+          let displayDate;
+          if (endDate.includes('Z') || endDate.match(/[+-]\d{2}:\d{2}$/)) {
+            // It's UTC or has timezone offset
+            displayDate = new Date(endDate);
+          } else {
+            // It's a local time string - parse as local time
+            const match = endDate.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+            if (match) {
+              const [, year, month, day, hour, minute, second] = match;
+              displayDate = new Date(
+                parseInt(year),
+                parseInt(month) - 1,
+                parseInt(day),
+                parseInt(hour),
+                parseInt(minute),
+                parseInt(second || 0)
+              );
+            } else {
+              displayDate = new Date(endDate);
+            }
+          }
+          return displayDate.toLocaleString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+          });
+        })()}
       </p>
     </div>
   );

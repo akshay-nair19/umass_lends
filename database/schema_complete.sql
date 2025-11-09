@@ -1,5 +1,6 @@
--- UMass Lends Database Schema
+-- UMass Lends Database Schema - Complete Version
 -- Run this in your Supabase SQL Editor
+-- If you already have tables, use database/fix_existing_schema.sql instead
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -41,7 +42,6 @@ CREATE TABLE IF NOT EXISTS borrow_requests (
   borrow_duration_hours INTEGER DEFAULT 0,
   borrow_duration_minutes INTEGER DEFAULT 0,
   return_deadline_datetime TIMESTAMP,
-  picked_up_at TIMESTAMP,
   CONSTRAINT fk_item FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
   CONSTRAINT fk_borrower FOREIGN KEY (borrower_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
@@ -67,7 +67,6 @@ CREATE INDEX IF NOT EXISTS idx_borrow_requests_owner_id ON borrow_requests(owner
 CREATE INDEX IF NOT EXISTS idx_borrow_requests_item_id ON borrow_requests(item_id);
 CREATE INDEX IF NOT EXISTS idx_borrow_requests_status ON borrow_requests(status);
 CREATE INDEX IF NOT EXISTS idx_borrow_requests_return_deadline ON borrow_requests(return_deadline_datetime);
-CREATE INDEX IF NOT EXISTS idx_borrow_requests_picked_up_at ON borrow_requests(picked_up_at);
 CREATE INDEX IF NOT EXISTS idx_messages_item_id ON messages(item_id);
 CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
@@ -82,7 +81,7 @@ DROP POLICY IF EXISTS "Allow all operations on items" ON items;
 DROP POLICY IF EXISTS "Allow all operations on borrow_requests" ON borrow_requests;
 DROP POLICY IF EXISTS "Allow all operations on messages" ON messages;
 
--- For now, create policies that allow all operations (will be restricted when auth is added)
+-- Create policies that allow all operations (will be restricted when auth is added)
 CREATE POLICY "Allow all operations on items" ON items FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all operations on borrow_requests" ON borrow_requests FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all operations on messages" ON messages FOR ALL USING (true) WITH CHECK (true);

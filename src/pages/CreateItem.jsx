@@ -18,6 +18,7 @@ const CreateItem = () => {
     category: '',
     condition: '',
     image_url: '',
+    location: '',
     available: true,
   });
   const [selectedImage, setSelectedImage] = useState(null);
@@ -200,6 +201,22 @@ const CreateItem = () => {
             <option value="Fair">Fair</option>
             <option value="Poor">Poor</option>
           </select>
+        </div>
+
+        {/* Location */}
+        <div>
+          <label className="block mb-2 font-semibold">Location</label>
+          <input
+            type="text"
+            name="location"
+            value={formData.location}
+            onChange={handleChange}
+            className="w-full px-4 py-2 border rounded-lg"
+            placeholder="e.g., Southwest Residential Area, Room 203"
+          />
+          <p className="text-sm text-gray-500 mt-1">
+            Where is this item located? (e.g., dorm, building, area on campus)
+          </p>
         </div>
 
         {/* Image Upload */}

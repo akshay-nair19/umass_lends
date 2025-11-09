@@ -27,6 +27,13 @@ const ItemCard = ({ item }) => {
         <h3 className="text-xl font-bold mb-2">{item.title}</h3>
         <p className="text-gray-600 mb-2 line-clamp-2">{item.description}</p>
         
+        {/* Location */}
+        {item.location && (
+          <div className="mb-2">
+            <span className="text-sm text-gray-500">📍 {item.location}</span>
+          </div>
+        )}
+        
         <div className="flex justify-between items-center mt-4">
           <div className="flex gap-2">
             {item.category && (

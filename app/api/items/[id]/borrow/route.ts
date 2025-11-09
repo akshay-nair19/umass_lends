@@ -44,26 +44,29 @@ export async function POST(
       .single();
     
     if (itemError || !item) {
-      return NextResponse.json<ApiResponse<null>>(
+      const response = NextResponse.json<ApiResponse<null>>(
         { success: false, error: 'Item not found' },
         { status: 404 }
       );
+      return addCorsHeaders(response);
     }
     
     // Check if item is available
     if (!item.available) {
-      return NextResponse.json<ApiResponse<null>>(
+      const response = NextResponse.json<ApiResponse<null>>(
         { success: false, error: 'Item is not available for borrowing' },
         { status: 400 }
       );
+      return addCorsHeaders(response);
     }
     
     // Check if user is trying to borrow their own item
     if (item.owner_id === user.id) {
-      return NextResponse.json<ApiResponse<null>>(
+      const response = NextResponse.json<ApiResponse<null>>(
         { success: false, error: 'Cannot borrow your own item' },
         { status: 400 }
       );
+      return addCorsHeaders(response);
     }
     
     // Check if there's already a pending request for this item by this user
@@ -76,20 +79,17 @@ export async function POST(
       .single();
     
     if (existingRequest) {
-      return NextResponse.json<ApiResponse<null>>(
+      const response = NextResponse.json<ApiResponse<null>>(
         { success: false, error: 'You already have a pending request for this item' },
         { status: 400 }
       );
+      return addCorsHeaders(response);
     }
     
-    // Calculate return deadline datetime if exact datetime is provided
-    let returnDeadlineDatetime = null;
-    if (validatedData.exactReturnDateTime) {
-      returnDeadlineDatetime = validatedData.exactReturnDateTime;
-    } else if (validatedData.borrow_end_date) {
-      // Fallback: use end of end date if exact datetime not provided
-      returnDeadlineDatetime = `${validatedData.borrow_end_date}T23:59:59`;
-    }
+    // Note: We no longer calculate return_deadline_datetime here
+    // The return deadline will be calculated when the lender marks the item as "picked up"
+    // This ensures the countdown starts from the actual pickup time, not the requested start time
+    // For now, we'll store the duration components and calculate the deadline when picked_up_at is set
 
     // Prepare insert data
     const insertData: any = {
@@ -111,9 +111,7 @@ export async function POST(
     if (validatedData.minutes !== undefined) {
       insertData.borrow_duration_minutes = validatedData.minutes;
     }
-    if (returnDeadlineDatetime) {
-      insertData.return_deadline_datetime = returnDeadlineDatetime;
-    }
+    // Note: return_deadline_datetime will be calculated when the item is marked as picked up
 
     // Create borrow request
     const { data, error } = await supabase
@@ -124,10 +122,11 @@ export async function POST(
     
     if (error) {
       console.error('Error creating borrow request:', error);
-      return NextResponse.json<ApiResponse<null>>(
+      const response = NextResponse.json<ApiResponse<null>>(
         { success: false, error: error.message },
         { status: 500 }
       );
+      return addCorsHeaders(response);
     }
     
     const response = NextResponse.json<ApiResponse<BorrowRequest>>(

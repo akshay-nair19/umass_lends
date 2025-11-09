@@ -11,6 +11,7 @@ import CountdownTimer from '../components/CountdownTimer';
 import { calculateExactReturnDeadline } from '../utils/dateUtils';
 import Notification from '../components/Notification';
 import { useNotification } from '../hooks/useNotification';
+import ConfirmModal from '../components/ConfirmModal';
 
 const BorrowRequests = () => {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ const BorrowRequests = () => {
   const [error, setError] = useState(null);
   const [filterStatus, setFilterStatus] = useState('');
   const { notification, showSuccess, showError, hideNotification } = useNotification();
+  const [cancelModal, setCancelModal] = useState({ isOpen: false, requestId: null, itemTitle: '' });
 
   useEffect(() => {
     if (!session) {
@@ -92,6 +94,43 @@ const BorrowRequests = () => {
     }
   };
 
+  const handleCancel = (requestId, itemTitle) => {
+    setCancelModal({
+      isOpen: true,
+      requestId,
+      itemTitle,
+    });
+  };
+
+  const confirmCancel = async () => {
+    const { requestId } = cancelModal;
+    try {
+      const response = await borrowAPI.cancel(requestId);
+      if (response.success) {
+        showSuccess('Request cancelled successfully');
+        loadRequests();
+      } else {
+        showError(`Error: ${response.error}`);
+      }
+    } catch (err) {
+      showError(`Error: ${err.message || 'Failed to cancel request'}`);
+    }
+  };
+
+  const handleMarkPickedUp = async (requestId) => {
+    try {
+      const response = await borrowAPI.markPickedUp(requestId);
+      if (response.success) {
+        showSuccess('Item marked as picked up! Countdown timer started.');
+        loadRequests();
+      } else {
+        showError(`Error: ${response.error}`);
+      }
+    } catch (err) {
+      showError(`Error: ${err.message || 'Failed to mark item as picked up'}`);
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'approved':
@@ -134,6 +173,17 @@ const BorrowRequests = () => {
         type={notification.type}
         onClose={hideNotification}
       />
+
+      <ConfirmModal
+        isOpen={cancelModal.isOpen}
+        onClose={() => setCancelModal({ isOpen: false, requestId: null, itemTitle: '' })}
+        onConfirm={confirmCancel}
+        title="Cancel Borrow Request"
+        message={`Are you sure you want to cancel your borrow request for "${cancelModal.itemTitle}"?\n\nThis action cannot be undone.`}
+        confirmText="Cancel Request"
+        cancelText="Keep Request"
+        type="warning"
+      />
       
       <h1 className="text-3xl font-bold mb-6">Borrow Requests</h1>
 
@@ -167,8 +217,8 @@ const BorrowRequests = () => {
           <div className="space-y-4">
             {myRequestsAsBorrower.map((request) => {
               const item = items[request.item_id];
-              // Calculate exact return deadline (only for approved requests)
-              const returnDeadline = request.status === 'approved' 
+              // Calculate exact return deadline (only show countdown if item was picked up)
+              const returnDeadline = request.status === 'approved' && request.picked_up_at
                 ? calculateExactReturnDeadline(request)
                 : null;
 
@@ -192,6 +242,16 @@ const BorrowRequests = () => {
                         Start: {new Date(request.borrow_start_date).toLocaleDateString()} - 
                         End: {new Date(request.borrow_end_date).toLocaleDateString()}
                       </p>
+                      {request.status === 'approved' && !request.picked_up_at && (
+                        <p className="text-sm text-orange-600 mt-1 font-medium">
+                          ⏳ Waiting for item to be picked up
+                        </p>
+                      )}
+                      {request.status === 'approved' && request.picked_up_at && (
+                        <p className="text-sm text-green-600 mt-1">
+                          ✅ Picked up: {new Date(request.picked_up_at).toLocaleString()}
+                        </p>
+                      )}
                       <span
                         className={`inline-block px-2 py-1 rounded text-sm mt-2 ${getStatusColor(
                           request.status
@@ -200,9 +260,19 @@ const BorrowRequests = () => {
                         {request.status}
                       </span>
                     </div>
+                    {request.status === 'pending' && (
+                      <div className="flex gap-2 ml-4">
+                        <button
+                          onClick={() => handleCancel(request.id, item?.title || 'this item')}
+                          className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 font-semibold transition-colors"
+                        >
+                          Cancel Request
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
-                  {/* Countdown Timer for Approved Requests */}
+                  {/* Countdown Timer - Only show if item was picked up */}
                   {returnDeadline && (
                     <div className="mt-3">
                       <CountdownTimer 
@@ -230,8 +300,8 @@ const BorrowRequests = () => {
             {myRequestsAsOwner.map((request) => {
               const item = items[request.item_id];
               const isOwner = request.owner_id === session.user?.id;
-              // Calculate exact return deadline (only for approved requests)
-              const returnDeadline = request.status === 'approved'
+              // Calculate exact return deadline (only show countdown if item was picked up)
+              const returnDeadline = request.status === 'approved' && request.picked_up_at
                 ? calculateExactReturnDeadline(request)
                 : null;
 
@@ -255,6 +325,16 @@ const BorrowRequests = () => {
                         Start: {new Date(request.borrow_start_date).toLocaleDateString()} - 
                         End: {new Date(request.borrow_end_date).toLocaleDateString()}
                       </p>
+                      {request.status === 'approved' && !request.picked_up_at && (
+                        <p className="text-sm text-orange-600 mt-1 font-medium">
+                          ⏳ Item not picked up yet - click "Picked Up" when borrower collects the item
+                        </p>
+                      )}
+                      {request.status === 'approved' && request.picked_up_at && (
+                        <p className="text-sm text-green-600 mt-1">
+                          ✅ Picked up: {new Date(request.picked_up_at).toLocaleString()}
+                        </p>
+                      )}
                       <span
                         className={`inline-block px-2 py-1 rounded text-sm mt-2 ${getStatusColor(
                           request.status
@@ -279,9 +359,19 @@ const BorrowRequests = () => {
                         </button>
                       </div>
                     )}
+                    {isOwner && request.status === 'approved' && !request.picked_up_at && (
+                      <div className="flex gap-2 ml-4">
+                        <button
+                          onClick={() => handleMarkPickedUp(request.id)}
+                          className="bg-umass-maroon text-umass-cream px-4 py-2 rounded hover:bg-umass-maroonDark font-semibold transition-colors"
+                        >
+                          Picked Up
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
-                  {/* Countdown Timer for Approved Requests */}
+                  {/* Countdown Timer - Only show if item was picked up */}
                   {returnDeadline && (
                     <div className="mt-3">
                       <CountdownTimer 

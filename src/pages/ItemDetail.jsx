@@ -30,7 +30,7 @@ const ItemDetail = () => {
     hours: 0,
     minutes: 0,
   });
-  const [startTime, setStartTime] = useState('00:00'); // Start time (HH:MM)
+  const [startTime, setStartTime] = useState(''); // Start time (HH:MM) - required
   const [exactReturnDateTime, setExactReturnDateTime] = useState(null); // Store exact return datetime
   const [submitting, setSubmitting] = useState(false);
   const [messageText, setMessageText] = useState('');
@@ -47,8 +47,51 @@ const ItemDetail = () => {
     return `${year}-${month}-${day}`;
   };
 
+  // Get current time in HH:MM format
+  const getCurrentTime = () => {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  // Get minimum time based on selected start date
+  // If today is selected, min time is current time (rounded up to next minute)
+  // If future date is selected, min time is 00:00
+  const getMinTime = () => {
+    if (!borrowDates.startDate) {
+      return '00:00';
+    }
+    
+    const today = getTodayLocal();
+    if (borrowDates.startDate === today) {
+      // For today, minimum time is current time + 1 minute (to avoid selecting past times)
+      const now = new Date();
+      const currentMinutes = now.getMinutes();
+      const currentHours = now.getHours();
+      
+      // Round up to next minute
+      let minMinutes = currentMinutes + 1;
+      let minHours = currentHours;
+      
+      if (minMinutes >= 60) {
+        minMinutes = 0;
+        minHours += 1;
+        if (minHours >= 24) {
+          minHours = 0;
+        }
+      }
+      
+      return `${String(minHours).padStart(2, '0')}:${String(minMinutes).padStart(2, '0')}`;
+    }
+    
+    // For future dates, any time is allowed
+    return '00:00';
+  };
+
   // Get the minimum selectable date (today in local timezone)
   const minDate = getTodayLocal();
+  const minTime = getMinTime();
 
   // Load item details
   useEffect(() => {
@@ -73,11 +116,11 @@ const ItemDetail = () => {
 
   // Calculate exact return datetime from start date, start time, and duration
   const calculateExactReturnDateTime = (startDate, startTime, months, days, hours, minutes) => {
-    if (!startDate) return { endDate: '', exactDateTime: null };
+    if (!startDate || !startTime) return { endDate: '', exactDateTime: null };
     
     // Parse start date and start time
     const [year, month, day] = startDate.split('-').map(Number);
-    const [startHour, startMinute] = (startTime || '00:00').split(':').map(Number);
+    const [startHour, startMinute] = startTime.split(':').map(Number);
     
     // Create start datetime in local timezone
     const startDateTime = new Date(year, month - 1, day, startHour || 0, startMinute || 0, 0, 0);
@@ -86,19 +129,16 @@ const ItemDetail = () => {
     const returnDateTime = new Date(startDateTime);
     
     // Add duration in order: months, days, hours, minutes
-    // Note: We add all values, even if 0, to ensure proper calculation
-    if (months) {
+    // Always add hours and minutes (even if 0) to ensure exact time calculation
+    if (months > 0) {
       returnDateTime.setMonth(returnDateTime.getMonth() + months);
     }
-    if (days) {
+    if (days > 0) {
       returnDateTime.setDate(returnDateTime.getDate() + days);
     }
-    if (hours) {
-      returnDateTime.setHours(returnDateTime.getHours() + hours);
-    }
-    if (minutes) {
-      returnDateTime.setMinutes(returnDateTime.getMinutes() + minutes);
-    }
+    // Always add hours and minutes to get exact time (no rounding)
+    returnDateTime.setHours(returnDateTime.getHours() + hours);
+    returnDateTime.setMinutes(returnDateTime.getMinutes() + minutes);
     
     // Format end date as YYYY-MM-DD for API
     const endYear = returnDateTime.getFullYear();
@@ -106,14 +146,27 @@ const ItemDetail = () => {
     const endDay = String(returnDateTime.getDate()).padStart(2, '0');
     const calculatedEndDate = `${endYear}-${endMonth}-${endDay}`;
     
-    // Store exact datetime as ISO string for countdown timer
-    // This preserves the exact time including hours and minutes
-    const exactDateTimeISO = returnDateTime.toISOString();
+    // Format datetime as ISO string but keep it in local timezone context
+    // We need to format it manually to avoid timezone conversion issues
+    // Format: YYYY-MM-DDTHH:mm:ss (without Z, so it's treated as local time)
+    const endHour = String(returnDateTime.getHours()).padStart(2, '0');
+    const endMinute = String(returnDateTime.getMinutes()).padStart(2, '0');
+    const endSecond = String(returnDateTime.getSeconds()).padStart(2, '0');
+    const exactDateTimeISO = `${endYear}-${endMonth}-${endDay}T${endHour}:${endMinute}:${endSecond}`;
     
     // Ensure end date is not before start date
     if (calculatedEndDate < startDate) {
       console.warn('Calculated end date is before start date, using start date as end date');
-      return { endDate: startDate, exactDateTime: startDateTime.toISOString() };
+      const startYear = startDateTime.getFullYear();
+      const startMonth = String(startDateTime.getMonth() + 1).padStart(2, '0');
+      const startDay = String(startDateTime.getDate()).padStart(2, '0');
+      const startHourStr = String(startDateTime.getHours()).padStart(2, '0');
+      const startMinuteStr = String(startDateTime.getMinutes()).padStart(2, '0');
+      const startSecondStr = String(startDateTime.getSeconds()).padStart(2, '0');
+      return { 
+        endDate: startDate, 
+        exactDateTime: `${startYear}-${startMonth}-${startDay}T${startHourStr}:${startMinuteStr}:${startSecondStr}`
+      };
     }
     
     return { endDate: calculatedEndDate, exactDateTime: exactDateTimeISO };
@@ -121,7 +174,7 @@ const ItemDetail = () => {
 
   // Update end date and exact return datetime when start date, time, or duration changes
   useEffect(() => {
-    if (borrowDates.startDate) {
+    if (borrowDates.startDate && startTime) {
       const { endDate, exactDateTime } = calculateExactReturnDateTime(
         borrowDates.startDate,
         startTime,
@@ -134,6 +187,24 @@ const ItemDetail = () => {
       setExactReturnDateTime(exactDateTime);
     }
   }, [borrowDates.startDate, startTime, duration.months, duration.days, duration.hours, duration.minutes]);
+
+  // When start date changes, update start time if needed
+  useEffect(() => {
+    if (borrowDates.startDate) {
+      const newMinTime = getMinTime();
+      const today = getTodayLocal();
+      
+      // If today is selected and current time is before selected time, update it
+      if (borrowDates.startDate === today) {
+        if (!startTime || startTime < newMinTime) {
+          setStartTime(newMinTime);
+        }
+      } else if (!startTime) {
+        // For future dates, default to 00:00 if not set
+        setStartTime('00:00');
+      }
+    }
+  }, [borrowDates.startDate]);
 
   // Handle borrow request
   const handleBorrowRequest = async (e) => {
@@ -149,6 +220,25 @@ const ItemDetail = () => {
       return;
     }
 
+    if (!startTime) {
+      showWarning('Please select a start time');
+      return;
+    }
+
+    // Validate that the selected time is not in the past if today is selected
+    const today = getTodayLocal();
+    if (borrowDates.startDate === today) {
+      const selectedTime = startTime.split(':').map(Number);
+      const currentTime = getCurrentTime().split(':').map(Number);
+      const selectedMinutes = selectedTime[0] * 60 + selectedTime[1];
+      const currentMinutes = currentTime[0] * 60 + currentTime[1];
+      
+      if (selectedMinutes < currentMinutes) {
+        showError('Start time cannot be in the past. Please select a future time.');
+        return;
+      }
+    }
+
     // Validate that end date is not before start date
     if (borrowDates.endDate && borrowDates.endDate < borrowDates.startDate) {
       showError('Return deadline cannot be before the start date. Please adjust the duration.');
@@ -162,7 +252,7 @@ const ItemDetail = () => {
         borrowDates.startDate,
         borrowDates.endDate,
         {
-          startTime: startTime || '00:00',
+          startTime: startTime, // Required now
           hours: duration.hours || 0,
           minutes: duration.minutes || 0,
           exactReturnDateTime: exactReturnDateTime || null,
@@ -174,7 +264,7 @@ const ItemDetail = () => {
         setShowBorrowForm(false);
         setBorrowDates({ startDate: '', endDate: '' });
         setDuration({ months: 0, days: 0, hours: 0, minutes: 0 });
-        setStartTime('00:00');
+        setStartTime('');
         setExactReturnDateTime(null);
       } else {
         showError(`Error: ${response.error}`);
@@ -304,6 +394,11 @@ const ItemDetail = () => {
                 <span className="font-semibold">Condition:</span> {item.condition}
               </div>
             )}
+            {item.location && (
+              <div>
+                <span className="font-semibold">📍 Location:</span> {item.location}
+              </div>
+            )}
             <div>
               <span className="font-semibold">Status:</span>{' '}
               {item.available ? (
@@ -327,7 +422,7 @@ const ItemDetail = () => {
               ) : (
                 <form onSubmit={handleBorrowRequest} className="space-y-4">
                   <div>
-                    <label className="block mb-2 font-medium">Start Date</label>
+                    <label className="block mb-2 font-medium">Start Date *</label>
                     <input
                       type="date"
                       value={borrowDates.startDate}
@@ -341,14 +436,21 @@ const ItemDetail = () => {
                   </div>
 
                   <div>
-                    <label className="block mb-2 font-medium">Start Time (Optional)</label>
+                    <label className="block mb-2 font-medium">Start Time *</label>
                     <input
                       type="time"
                       value={startTime}
                       onChange={(e) => setStartTime(e.target.value)}
                       className="w-full px-4 py-2 border rounded-lg"
+                      required
+                      min={getMinTime()}
+                      key={borrowDates.startDate} // Force re-render when date changes to update min
                     />
-                    <p className="text-xs text-gray-500 mt-1">Default: 12:00 AM (midnight)</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {borrowDates.startDate === getTodayLocal() 
+                        ? `Earliest time: ${getMinTime()} (cannot select past times)`
+                        : 'Select the time you want to start borrowing'}
+                    </p>
                   </div>
                   
                   <div>
@@ -413,56 +515,86 @@ const ItemDetail = () => {
                     )}
                   </div>
 
-                  {exactReturnDateTime && (
-                    <div className={`border rounded-lg p-3 ${
-                      borrowDates.endDate < borrowDates.startDate 
-                        ? 'bg-red-50 border-red-200' 
-                        : borrowDates.endDate === borrowDates.startDate
-                        ? 'bg-yellow-50 border-yellow-200'
-                        : 'bg-blue-50 border-blue-200'
-                    }`}>
-                      <p className="text-sm font-medium text-gray-700 mb-1">Exact Return Deadline:</p>
-                      <p className="text-lg font-bold text-umass-maroon">
-                        {new Date(exactReturnDateTime).toLocaleString('en-US', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true,
-                        })}
-                      </p>
-                      {borrowDates.endDate < borrowDates.startDate && (
-                        <p className="text-sm text-red-600 mt-2 font-medium">
-                          ⚠️ Warning: Return deadline is before start date!
-                        </p>
+                      {exactReturnDateTime && startTime && (
+                        <div className={`border rounded-lg p-3 ${
+                          borrowDates.endDate < borrowDates.startDate 
+                            ? 'bg-red-50 border-red-200' 
+                            : borrowDates.endDate === borrowDates.startDate
+                            ? 'bg-yellow-50 border-yellow-200'
+                            : 'bg-blue-50 border-blue-200'
+                        }`}>
+                          <p className="text-sm font-medium text-gray-700 mb-1">Exact Return Deadline:</p>
+                          <p className="text-lg font-bold text-umass-maroon">
+                            {(() => {
+                              // Parse exactReturnDateTime as local time to avoid timezone issues
+                              let displayDate;
+                              if (exactReturnDateTime.includes('Z') || exactReturnDateTime.match(/[+-]\d{2}:\d{2}$/)) {
+                                displayDate = new Date(exactReturnDateTime);
+                              } else {
+                                // Parse as local time string
+                                const match = exactReturnDateTime.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+                                if (match) {
+                                  const [, year, month, day, hour, minute, second] = match;
+                                  displayDate = new Date(
+                                    parseInt(year),
+                                    parseInt(month) - 1,
+                                    parseInt(day),
+                                    parseInt(hour),
+                                    parseInt(minute),
+                                    parseInt(second || 0)
+                                  );
+                                } else {
+                                  displayDate = new Date(exactReturnDateTime);
+                                }
+                              }
+                              return displayDate.toLocaleString('en-US', {
+                                weekday: 'long',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true,
+                              });
+                            })()}
+                          </p>
+                          {borrowDates.endDate < borrowDates.startDate && (
+                            <p className="text-sm text-red-600 mt-2 font-medium">
+                              ⚠️ Warning: Return deadline is before start date!
+                            </p>
+                          )}
+                          {borrowDates.endDate === borrowDates.startDate && (duration.months === 0 && duration.days === 0) && (
+                            <p className="text-sm text-yellow-700 mt-2">
+                              Same-day return requested
+                            </p>
+                          )}
+                        </div>
                       )}
-                      {borrowDates.endDate === borrowDates.startDate && (duration.months === 0 && duration.days === 0) && (
-                        <p className="text-sm text-yellow-700 mt-2">
-                          Same-day return requested
-                        </p>
+                      {!startTime && borrowDates.startDate && (
+                        <div className="border border-yellow-200 bg-yellow-50 rounded-lg p-3">
+                          <p className="text-sm text-yellow-700">
+                            Please select a start time to see the return deadline
+                          </p>
+                        </div>
                       )}
-                    </div>
-                  )}
 
                   <div className="flex gap-2">
                     <button
                       type="submit"
-                      disabled={submitting || (borrowDates.endDate && borrowDates.endDate < borrowDates.startDate)}
+                      disabled={submitting || !startTime || (borrowDates.endDate && borrowDates.endDate < borrowDates.startDate)}
                       className="flex-1 bg-umass-maroon text-umass-cream px-6 py-3 rounded-lg hover:bg-umass-maroonDark disabled:opacity-50 font-semibold transition-colors shadow-md"
                     >
                       {submitting ? 'Submitting...' : 'Submit Request'}
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        setShowBorrowForm(false);
-                        setBorrowDates({ startDate: '', endDate: '' });
-                        setDuration({ months: 0, days: 0, hours: 0, minutes: 0 });
-                        setStartTime('00:00');
-                        setExactReturnDateTime(null);
-                      }}
+                        onClick={() => {
+                          setShowBorrowForm(false);
+                          setBorrowDates({ startDate: '', endDate: '' });
+                          setDuration({ months: 0, days: 0, hours: 0, minutes: 0 });
+                          setStartTime('');
+                          setExactReturnDateTime(null);
+                        }}
                       className="px-6 py-3 border rounded-lg"
                     >
                       Cancel

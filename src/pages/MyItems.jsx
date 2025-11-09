@@ -216,7 +216,10 @@ const MyItems = () => {
                     <div className="space-y-2">
                       {requests.map((request) => {
                         // Calculate exact return deadline using utility function
-                        const returnDeadline = calculateExactReturnDeadline(request);
+                        // Only show countdown if item was picked up
+                        const returnDeadline = request.picked_up_at 
+                          ? calculateExactReturnDeadline(request)
+                          : null;
 
                         return (
                           <div

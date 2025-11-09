@@ -17,6 +17,7 @@ export interface Item {
   category?: string;
   condition?: string;
   image_url?: string;
+  location?: string;
   available: boolean;
   created_at?: string;
 }
@@ -34,6 +35,7 @@ export interface BorrowRequest {
   borrow_duration_hours?: number;
   borrow_duration_minutes?: number;
   return_deadline_datetime?: string; // ISO 8601 datetime string
+  picked_up_at?: string; // ISO 8601 datetime string - when item was actually picked up
   // Added for displaying user names
   borrower_name?: string;
   borrower_email?: string;

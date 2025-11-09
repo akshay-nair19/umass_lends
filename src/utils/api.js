@@ -20,23 +20,38 @@ async function getToken() {
  * Make an authenticated API request
  */
 async function apiRequest(endpoint, options = {}) {
-  const token = await getToken();
-  
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      ...options.headers,
-    },
-  });
+  try {
+    const token = await getToken();
+    
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...options.headers,
+      },
+    });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || `HTTP ${response.status}`);
+    // Handle network errors
+    if (!response) {
+      throw new Error(`Failed to connect to server. Make sure the backend is running at ${API_BASE}`);
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ 
+        error: `Server error: ${response.status} ${response.statusText}` 
+      }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    // Handle network errors (CORS, connection refused, etc.)
+    if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+      throw new Error(`Cannot connect to server at ${API_BASE}. Make sure the backend is running on port 3000.`);
+    }
+    throw error;
   }
-
-  return response.json();
 }
 
 /**
@@ -133,6 +148,20 @@ export const borrowAPI = {
   // Mark item as returned
   markReturned: (requestId) => {
     return apiRequest(`/api/borrow/${requestId}/mark-returned`, {
+      method: 'POST',
+    });
+  },
+
+  // Cancel request (borrower only)
+  cancel: (requestId) => {
+    return apiRequest(`/api/borrow/${requestId}/cancel`, {
+      method: 'POST',
+    });
+  },
+
+  // Mark item as picked up (lender only) - starts the countdown timer
+  markPickedUp: (requestId) => {
+    return apiRequest(`/api/borrow/${requestId}/mark-picked-up`, {
       method: 'POST',
     });
   },
