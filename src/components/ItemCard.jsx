@@ -7,7 +7,8 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 const ItemCard = ({ item, compact = false, noBorder = false }) => {
-  const imageHeight = compact ? 'h-32' : 'h-48';
+  // Use taller aspect ratio for portrait orientation (3:4 ratio)
+  const imageHeight = compact ? 'h-56' : 'h-72';
   const padding = noBorder ? '' : (compact ? 'p-3' : 'p-4');
   const titleSize = compact ? 'text-lg' : 'text-xl';
   const borderClass = noBorder ? '' : 'border rounded-lg';

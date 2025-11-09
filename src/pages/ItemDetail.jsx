@@ -116,10 +116,16 @@ const ItemDetail = () => {
   // Load current user's profile picture and owner's profile picture
   useEffect(() => {
     const loadUserProfiles = async () => {
+      // Support both Vite and Next.js environments
+      const apiBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) 
+        || (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_API_URL) 
+        || (typeof process !== 'undefined' && process.env?.VITE_API_URL)
+        || 'http://localhost:3000';
+      
       if (session?.user?.id) {
         try {
           // Load current user's profile picture
-          const userResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/users/${session.user.id}`, {
+          const userResponse = await fetch(`${apiBase}/api/users/${session.user.id}`, {
             headers: {
               'Authorization': `Bearer ${session.access_token}`,
             },
@@ -138,7 +144,7 @@ const ItemDetail = () => {
       // Load owner's profile picture if item is loaded and user is not the owner
       if (item?.owner_id && session?.user?.id !== item.owner_id) {
         try {
-          const ownerResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/users/${item.owner_id}`);
+          const ownerResponse = await fetch(`${apiBase}/api/users/${item.owner_id}`);
           if (ownerResponse.ok) {
             const ownerData = await ownerResponse.json();
             if (ownerData.success && ownerData.data?.profile_picture_url) {
@@ -574,10 +580,10 @@ const ItemDetail = () => {
             <img
               src={item.image_url}
               alt={item.title}
-              className="w-full h-64 object-cover rounded-lg mb-4"
+              className="w-full h-96 object-cover rounded-lg mb-4"
             />
           ) : (
-            <div className="w-full h-64 bg-gray-200 rounded-lg mb-4 flex items-center justify-center">
+            <div className="w-full h-96 bg-gray-200 rounded-lg mb-4 flex items-center justify-center">
               <span className="text-gray-400">No image</span>
             </div>
           )}

@@ -3,7 +3,28 @@
  */
 import { supabase } from '../supabaseClient';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+// Support both Vite (import.meta.env) and Next.js (process.env) environments
+const getApiBase = () => {
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) {
+      return import.meta.env.VITE_API_URL;
+    }
+  } catch (e) {
+    // import.meta not available
+  }
+  
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL;
+    }
+  } catch (e) {
+    // process not available
+  }
+  
+  return 'http://localhost:3000';
+};
+
+const API_BASE = getApiBase();
 
 /**
  * Get the current session token
