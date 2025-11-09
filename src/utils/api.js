@@ -197,13 +197,24 @@ export const messagesAPI = {
 
   // Send message
   send: (itemId, text, participantId = null) => {
+    // Validate inputs
+    if (!itemId || !text || typeof text !== 'string' || !text.trim()) {
+      return Promise.reject(new Error('Item ID and message text are required'));
+    }
+    
+    const body = {
+      item_id: itemId,
+      text: text.trim(),
+    };
+    
+    // Only include participant_id if it's provided (not null or undefined)
+    if (participantId && typeof participantId === 'string') {
+      body.participant_id = participantId;
+    }
+    
     return apiRequest('/api/messages', {
       method: 'POST',
-      body: JSON.stringify({
-        item_id: itemId,
-        text,
-        participant_id: participantId,
-      }),
+      body: JSON.stringify(body),
     });
   },
 };

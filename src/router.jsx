@@ -13,6 +13,7 @@ import Profile from "./pages/Profile";
 import CreateRequest from "./pages/CreateRequest";
 import MyRequests from "./pages/MyRequests";
 import AvailableRequests from "./pages/AvailableRequests";
+import CustomRequests from "./pages/CustomRequests";
 import Layout from "./components/Layout";
 
 export const router = createBrowserRouter([
@@ -84,6 +85,14 @@ export const router = createBrowserRouter([
                 element: (
                     <PrivateRoute>
                         <AvailableRequests />
+                    </PrivateRoute>
+                ),
+            },
+            {
+                path: "/custom-requests",
+                element: (
+                    <PrivateRoute>
+                        <CustomRequests />
                     </PrivateRoute>
                 ),
             },

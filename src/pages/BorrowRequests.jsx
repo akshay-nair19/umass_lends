@@ -8,7 +8,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { UserAuth } from '../context/AuthContext';
 import { borrowAPI, itemsAPI } from '../utils/api';
 import CountdownTimer from '../components/CountdownTimer';
-import { calculateExactReturnDeadline } from '../utils/dateUtils';
+import { calculateExactReturnDeadline, formatDateOnlyEST, formatDateTimeEST } from '../utils/dateUtils';
 import Notification from '../components/Notification';
 import { useNotification } from '../hooks/useNotification';
 import ConfirmModal from '../components/ConfirmModal';
@@ -239,8 +239,8 @@ const BorrowRequests = () => {
                         Owner: {request.owner_name || request.owner_email || 'Unknown User'}
                       </p>
                       <p className="text-sm text-gray-600">
-                        Start: {new Date(request.borrow_start_date).toLocaleDateString()} - 
-                        End: {new Date(request.borrow_end_date).toLocaleDateString()}
+                        Start: {formatDateOnlyEST(request.borrow_start_date)} - 
+                        End: {formatDateOnlyEST(request.borrow_end_date)}
                       </p>
                       {request.status === 'approved' && !request.picked_up_at && (
                         <p className="text-sm text-orange-600 mt-1 font-medium">
@@ -249,7 +249,7 @@ const BorrowRequests = () => {
                       )}
                       {request.status === 'approved' && request.picked_up_at && (
                         <p className="text-sm text-green-600 mt-1">
-                          ✅ Picked up: {new Date(request.picked_up_at).toLocaleString()}
+                          ✅ Picked up: {formatDateTimeEST(request.picked_up_at)}
                         </p>
                       )}
                       <span
@@ -322,8 +322,8 @@ const BorrowRequests = () => {
                         Requested by: {request.borrower_name || request.borrower_email || 'Unknown User'}
                       </p>
                       <p className="text-sm text-gray-600">
-                        Start: {new Date(request.borrow_start_date).toLocaleDateString()} - 
-                        End: {new Date(request.borrow_end_date).toLocaleDateString()}
+                        Start: {formatDateOnlyEST(request.borrow_start_date)} - 
+                        End: {formatDateOnlyEST(request.borrow_end_date)}
                       </p>
                       {request.status === 'approved' && !request.picked_up_at && (
                         <p className="text-sm text-orange-600 mt-1 font-medium">
@@ -332,7 +332,7 @@ const BorrowRequests = () => {
                       )}
                       {request.status === 'approved' && request.picked_up_at && (
                         <p className="text-sm text-green-600 mt-1">
-                          ✅ Picked up: {new Date(request.picked_up_at).toLocaleString()}
+                          ✅ Picked up: {formatDateTimeEST(request.picked_up_at)}
                         </p>
                       )}
                       <span

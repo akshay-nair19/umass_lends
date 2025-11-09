@@ -9,7 +9,7 @@ import { UserAuth } from '../context/AuthContext';
 import { itemsAPI, borrowAPI } from '../utils/api';
 import ItemCard from '../components/ItemCard';
 import CountdownTimer from '../components/CountdownTimer';
-import { calculateExactReturnDeadline } from '../utils/dateUtils';
+import { calculateExactReturnDeadline, formatDateOnlyEST } from '../utils/dateUtils';
 import Notification from '../components/Notification';
 import { useNotification } from '../hooks/useNotification';
 import ConfirmModal from '../components/ConfirmModal';
@@ -233,8 +233,8 @@ const MyItems = () => {
                                   {request.borrower_name || request.borrower_email || request.borrower_id}
                                 </p>
                                 <p className="text-sm text-gray-600 mt-1">
-                                  Start: {new Date(request.borrow_start_date).toLocaleDateString()} - 
-                                  End: {new Date(request.borrow_end_date).toLocaleDateString()}
+                                  Start: {formatDateOnlyEST(request.borrow_start_date)} - 
+                                  End: {formatDateOnlyEST(request.borrow_end_date)}
                                 </p>
                                 {request.status === 'approved' && (
                                   <p className="text-sm text-umass-maroon font-medium mt-2">

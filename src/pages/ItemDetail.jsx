@@ -12,6 +12,7 @@ import { useNotification } from '../hooks/useNotification';
 import CollateralModal from '../components/CollateralModal';
 import UserInfoModal from '../components/UserInfoModal';
 import ReportModal from '../components/ReportModal';
+import { formatTimeEST, formatDateOnlyEST, formatDateTimeEST } from '../utils/dateUtils';
 // Note: You'll need to implement useRealtimeMessages hook or use the example
 // For now, we'll use a simpler approach with polling
 
@@ -366,14 +367,16 @@ const ItemDetail = () => {
       return;
     }
 
-    if (!messageText.trim()) {
+    // Validate message text
+    if (!messageText || typeof messageText !== 'string' || !messageText.trim()) {
+      showError('Please enter a message');
       return;
     }
 
     try {
       // For owners, include participant_id if a conversation is selected
       const participantId = isOwner && selectedParticipantId ? selectedParticipantId : null;
-      await messagesAPI.send(id, messageText, participantId);
+      await messagesAPI.send(id, messageText.trim(), participantId);
       setMessageText('');
       // Reload messages and conversations to update UI
       loadMessages();
@@ -765,15 +768,7 @@ const ItemDetail = () => {
                                   displayDate = new Date(exactReturnDateTime);
                                 }
                               }
-                              return displayDate.toLocaleString('en-US', {
-                                weekday: 'long',
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                                hour: 'numeric',
-                                minute: '2-digit',
-                                hour12: true,
-                              });
+                              return formatDateTimeEST(displayDate);
                             })()}
                           </p>
                           {borrowDates.endDate < borrowDates.startDate && (
@@ -1105,7 +1100,7 @@ const ItemDetail = () => {
                                 </div>
                                 {showTimestamp && (
                                   <p className="text-xs text-gray-500 mt-1 px-1">
-                                    {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {formatTimeEST(message.created_at)}
                                   </p>
                                 )}
                               </div>
@@ -1289,7 +1284,7 @@ const ItemDetail = () => {
                           </div>
                           {showTimestamp && (
                             <p className="text-xs text-gray-500 mt-1 px-1">
-                              {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {formatTimeEST(message.created_at)}
                             </p>
                           )}
                         </div>

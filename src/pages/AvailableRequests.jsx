@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { UserAuth } from '../context/AuthContext';
 import { itemRequestsAPI } from '../utils/api';
 import { uploadImage } from '../utils/imageUpload';
+import { formatDateOnlyEST } from '../utils/dateUtils';
 
 const AvailableRequests = () => {
   const navigate = useNavigate();
@@ -173,7 +174,7 @@ const AvailableRequests = () => {
               )}
 
               <div className="text-sm text-gray-500 mb-4">
-                Requested: {new Date(request.created_at).toLocaleDateString()}
+                Requested: {formatDateOnlyEST(request.created_at)}
               </div>
 
               <button

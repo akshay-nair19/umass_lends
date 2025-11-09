@@ -1,9 +1,11 @@
 /**
  * Countdown Timer Component
  * Displays a live countdown until a target date/time
+ * All times displayed in EST/EDT
  */
 
 import React, { useState, useEffect } from 'react';
+import { formatDateTimeEST } from '../utils/dateUtils';
 
 const CountdownTimer = ({ endDate, label = 'Time remaining' }) => {
   const [timeRemaining, setTimeRemaining] = useState({
@@ -144,15 +146,7 @@ const CountdownTimer = ({ endDate, label = 'Time remaining' }) => {
               displayDate = new Date(endDate);
             }
           }
-          return displayDate.toLocaleString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true,
-          });
+          return formatDateTimeEST(displayDate);
         })()}
       </p>
     </div>

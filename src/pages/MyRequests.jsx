@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { UserAuth } from '../context/AuthContext';
 import { itemRequestsAPI } from '../utils/api';
+import { formatDateOnlyEST } from '../utils/dateUtils';
 
 const MyRequests = () => {
   const navigate = useNavigate();
@@ -121,7 +122,7 @@ const MyRequests = () => {
               )}
 
               <div className="text-sm text-gray-500 mb-3">
-                Created: {new Date(request.created_at).toLocaleDateString()}
+                Created: {formatDateOnlyEST(request.created_at)}
               </div>
 
               {request.status === 'accepted' && request.created_item_id && (
