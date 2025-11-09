@@ -199,21 +199,23 @@ const MyItems = () => {
           </button>
         </div>
       ) : (
-        <div className="space-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {items.map((item) => {
             const requests = getRequestsForItem(item.id);
             const hasActiveBorrows = requests.some(req => req.status === 'approved');
             return (
-              <div key={item.id} className="border rounded-lg p-6">
-                <ItemCard item={item} />
+              <div key={item.id} className="border border-umass-maroon rounded-lg overflow-hidden bg-white flex flex-col hover:shadow-lg transition-shadow">
+                <div className="flex-1 px-4 pt-4 pb-2">
+                  <ItemCard item={item} compact={true} noBorder={true} />
+                </div>
                 
                 {/* Borrow Requests for this item */}
                 {requests.length > 0 && (
-                  <div className="mt-4">
-                    <h3 className="font-semibold mb-2">
+                  <div className="px-4 pb-2">
+                    <h3 className="font-semibold mb-2 text-sm">
                       {requests.some(r => r.status === 'pending') ? 'Pending Requests:' : 'Active Borrows:'}
                     </h3>
-                    <div className="space-y-2">
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
                       {requests.map((request) => {
                         // Calculate exact return deadline using utility function
                         // Only show countdown if item was picked up
@@ -224,36 +226,36 @@ const MyItems = () => {
                         return (
                           <div
                             key={request.id}
-                            className="border rounded-lg p-4 bg-white shadow-sm"
+                            className="border rounded-lg p-3 bg-white shadow-sm"
                           >
-                            <div className="flex justify-between items-start mb-3">
+                            <div className="flex flex-col gap-2">
                               <div className="flex-1">
-                                <p className="font-semibold text-lg">
+                                <p className="font-semibold text-sm">
                                   {request.status === 'approved' ? 'Borrowed by: ' : 'Request from: '}
                                   {request.borrower_name || request.borrower_email || request.borrower_id}
                                 </p>
-                                <p className="text-sm text-gray-600 mt-1">
+                                <p className="text-xs text-gray-600 mt-1">
                                   Start: {formatDateOnlyEST(request.borrow_start_date)} - 
                                   End: {formatDateOnlyEST(request.borrow_end_date)}
                                 </p>
                                 {request.status === 'approved' && (
-                                  <p className="text-sm text-umass-maroon font-medium mt-2">
+                                  <p className="text-xs text-umass-maroon font-medium mt-2">
                                     Status: Currently Borrowed
                                   </p>
                                 )}
                               </div>
-                              <div className="flex gap-2 ml-4">
+                              <div className="flex gap-2 flex-wrap">
                                 {request.status === 'pending' ? (
                                   <>
                                     <button
                                       onClick={() => handleApprove(request.id)}
-                                      className="bg-green-600 text-umass-cream px-4 py-2 rounded hover:bg-green-700 font-semibold transition-colors"
+                                      className="bg-green-600 text-umass-cream px-3 py-1.5 rounded hover:bg-green-700 font-semibold transition-colors text-sm"
                                     >
                                       Approve
                                     </button>
                                     <button
                                       onClick={() => handleReject(request.id)}
-                                      className="bg-red-600 text-umass-cream px-4 py-2 rounded hover:bg-red-700 font-semibold transition-colors"
+                                      className="bg-red-600 text-umass-cream px-3 py-1.5 rounded hover:bg-red-700 font-semibold transition-colors text-sm"
                                     >
                                       Reject
                                     </button>
@@ -261,7 +263,7 @@ const MyItems = () => {
                                 ) : (
                                   <button
                                     onClick={() => handleMarkReturned(request.id)}
-                                    className="bg-umass-maroon text-umass-cream px-4 py-2 rounded hover:bg-umass-maroonDark font-semibold transition-colors"
+                                    className="bg-umass-maroon text-umass-cream px-3 py-1.5 rounded hover:bg-umass-maroonDark font-semibold transition-colors text-sm"
                                   >
                                     Mark as Returned
                                   </button>
@@ -271,7 +273,7 @@ const MyItems = () => {
                             
                             {/* Countdown Timer for Approved Requests */}
                             {request.status === 'approved' && returnDeadline && (
-                              <div className="mt-3">
+                              <div className="mt-2">
                                 <CountdownTimer 
                                   endDate={returnDeadline}
                                   label="Time until return deadline"
@@ -286,16 +288,16 @@ const MyItems = () => {
                 )}
                 
                 {/* Delete Item Button - Under the item */}
-                <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="mt-auto px-4 pb-4 pt-2 border-t border-gray-200">
                   <button
                     onClick={() => handleDeleteItem(item.id, item.title)}
                     disabled={hasActiveBorrows}
-                    className="w-full bg-umass-maroon text-umass-cream px-4 py-3 rounded-lg hover:bg-umass-maroonDark disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm"
+                    className="w-full bg-gray-200 text-gray-700 border border-gray-400 px-3 py-2 rounded hover:bg-gray-300 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed font-semibold transition-colors flex items-center justify-center gap-2 text-sm"
                     title={hasActiveBorrows ? 'Cannot delete item that is currently being borrowed' : 'Delete this item permanently'}
                   >
                     <svg 
                       xmlns="http://www.w3.org/2000/svg" 
-                      className="h-5 w-5" 
+                      className="h-4 w-4" 
                       viewBox="0 0 24 24" 
                       fill="none" 
                       stroke="currentColor" 
@@ -311,7 +313,7 @@ const MyItems = () => {
                     Delete Item
                   </button>
                   {hasActiveBorrows && (
-                    <p className="text-xs text-umass-maroon text-center mt-2 font-medium">
+                    <p className="text-xs text-umass-maroon text-center mt-1 font-medium">
                       ⚠️ Cannot delete item that is currently being borrowed
                     </p>
                   )}

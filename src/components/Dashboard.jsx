@@ -18,7 +18,7 @@ const Dashboard = () => {
 
             {/* Navigation */}
             <div className="container mx-auto px-4 py-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                     <Link
                         to="/my-items"
                         className="p-6 border-2 border-umass-maroon rounded-lg hover:bg-umass-lightGray hover:shadow-lg transition-all"
@@ -32,13 +32,6 @@ const Dashboard = () => {
                     >
                         <h3 className="text-xl font-bold mb-2 text-umass-maroon">Borrow Requests</h3>
                         <p className="text-umass-gray">View and manage requests</p>
-                    </Link>
-                    <Link
-                        to="/items/new"
-                        className="p-6 border-2 border-umass-maroon rounded-lg hover:bg-umass-lightGray hover:shadow-lg transition-all"
-                    >
-                        <h3 className="text-xl font-bold mb-2 text-umass-maroon">Create Item</h3>
-                        <p className="text-umass-gray">List a new item</p>
                     </Link>
                 </div>
             </div>

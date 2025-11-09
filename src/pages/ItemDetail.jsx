@@ -3,7 +3,7 @@
  * Shows full item details, allows borrowing, and messaging
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { UserAuth } from '../context/AuthContext';
 import { itemsAPI, borrowAPI, messagesAPI, collateralAPI, reportsAPI } from '../utils/api';
@@ -397,37 +397,46 @@ const ItemDetail = () => {
   const [selectedParticipantName, setSelectedParticipantName] = useState(null);
   const [currentUserProfilePic, setCurrentUserProfilePic] = useState(null);
   const [ownerProfilePic, setOwnerProfilePic] = useState(null);
+  const selectedParticipantIdRef = useRef(null);
+  const hasAutoSelectedRef = useRef(false);
 
   // Load conversations list (for owners)
   // Note: isOwner is already declared earlier in the file
   useEffect(() => {
     if (isOwner && item) {
-      loadConversations();
+      loadConversations(true); // First load
       // Poll for new conversations every 3 seconds
-      const interval = setInterval(loadConversations, 3000);
+      const interval = setInterval(() => loadConversations(false), 3000);
       return () => clearInterval(interval);
     }
   }, [id, isOwner, item]);
 
-  const loadConversations = async () => {
+  const loadConversations = async (isInitialLoad = false) => {
     if (!isOwner || !item) return;
     try {
       const response = await messagesAPI.getConversations(id);
       if (response && response.success) {
         const conversationsData = response.data || [];
         setConversations(conversationsData);
-        // Auto-select first conversation if none selected
-        if (!selectedParticipantId && conversationsData.length > 0) {
-          setSelectedParticipantId(conversationsData[0].participant_id);
-          setSelectedParticipantName(conversationsData[0].participant_name);
-        }
-        // Update the selected participant name if it exists in the new data
-        if (selectedParticipantId) {
-          const selectedConv = conversationsData.find(c => c.participant_id === selectedParticipantId);
-          if (selectedConv?.participant_name) {
-            setSelectedParticipantName(selectedConv.participant_name);
+        
+        // Update the selected participant name if the selected conversation exists in the new data
+        // This ensures the name stays in sync even during polling
+        setSelectedParticipantId(currentId => {
+          if (currentId) {
+            // User has made a selection - preserve it and update name if needed
+            const selectedConv = conversationsData.find(c => c.participant_id === currentId);
+            if (selectedConv?.participant_name) {
+              setSelectedParticipantName(selectedConv.participant_name);
+            }
+            return currentId;
+          } else if (isInitialLoad && !hasAutoSelectedRef.current && conversationsData.length > 0) {
+            // Only auto-select on the very first load if no selection exists
+            hasAutoSelectedRef.current = true;
+            setSelectedParticipantName(conversationsData[0].participant_name);
+            return conversationsData[0].participant_id;
           }
-        }
+          return currentId;
+        });
       }
     } catch (err) {
       console.log('Error loading conversations:', err.message || err);
@@ -459,19 +468,25 @@ const ItemDetail = () => {
     }
   }, [selectedParticipantId, conversations, messages, selectedParticipantName]);
 
-  // Load messages for selected conversation
+  // Update ref whenever selectedParticipantId changes
   useEffect(() => {
-    if (!item) return;
-    loadMessages();
-    // Poll for new messages every 2 seconds (or use realtime)
-    const interval = setInterval(loadMessages, 2000);
-    return () => clearInterval(interval);
-  }, [id, selectedParticipantId, item, isOwner]);
+    selectedParticipantIdRef.current = selectedParticipantId;
+  }, [selectedParticipantId]);
 
+  // Load messages for selected conversation
+  // This function uses the ref to always get the latest selectedParticipantId, avoiding stale closures
   const loadMessages = async () => {
     if (!item) return;
+    // Use ref to get the latest value (avoids stale closures in interval)
+    const currentParticipantId = selectedParticipantIdRef.current;
+    // For owners, ensure we have a selected participant before loading
+    if (isOwner && !currentParticipantId) {
+      setMessages([]);
+      setMessagesLoading(false);
+      return;
+    }
     try {
-      const response = await messagesAPI.getByItem(id, isOwner ? selectedParticipantId : null);
+      const response = await messagesAPI.getByItem(id, isOwner ? currentParticipantId : null);
       if (response && response.success) {
         setMessages(response.data || []);
       } else {
@@ -487,6 +502,30 @@ const ItemDetail = () => {
       setMessagesLoading(false);
     }
   };
+
+  // Load messages when selection changes or item loads
+  useEffect(() => {
+    if (!item) return;
+    // Don't load messages if owner hasn't selected a participant yet
+    if (isOwner && !selectedParticipantId) {
+      setMessages([]);
+      setMessagesLoading(false);
+      return;
+    }
+    
+    // Load messages immediately when selection changes
+    loadMessages();
+    // Poll for new messages every 2 seconds (or use realtime)
+    const interval = setInterval(() => {
+      // Use ref to check current selection (avoids stale closures)
+      const currentParticipantId = selectedParticipantIdRef.current;
+      // Only poll if we have a valid selection (for owners)
+      if (!isOwner || currentParticipantId) {
+        loadMessages();
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [id, selectedParticipantId, item, isOwner]);
 
   if (loading) {
     return (
@@ -912,13 +951,13 @@ const ItemDetail = () => {
                       <button
                         key={conversation.participant_id}
                         onClick={() => {
+                          // Set selection immediately - this will trigger messages to reload via useEffect
                           setSelectedParticipantId(conversation.participant_id);
                           setSelectedParticipantName(conversation.participant_name);
-                          loadConversations();
                         }}
                         className={`w-full text-left p-3 hover:bg-gray-50 transition-colors border-b border-gray-100 ${
                           selectedParticipantId === conversation.participant_id
-                            ? 'bg-blue-50 border-l-4 border-l-umass-maroon'
+                            ? 'bg-white border-l-4 border-l-umass-maroon'
                             : ''
                         }`}
                       >
