@@ -3,11 +3,32 @@ import { createClient } from '@supabase/supabase-js';
 import { User } from './types';
 import { ensureUser } from './ensureUser';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+/**
+ * Get Supabase configuration from environment variables
+ * Checks at runtime to avoid errors at module load time
+ */
+function getSupabaseConfig() {
+  const supabaseUrl = 
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 
+    process.env.VITE_SUPABASE_URL;
+    
+  const supabaseAnonKey = 
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+    process.env.VITE_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please check your .env file.');
+  if (!supabaseUrl || !supabaseAnonKey) {
+    const missingVars = [];
+    if (!supabaseUrl) missingVars.push('NEXT_PUBLIC_SUPABASE_URL');
+    if (!supabaseAnonKey) missingVars.push('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    
+    throw new Error(
+      `Missing Supabase environment variables: ${missingVars.join(', ')}. ` +
+      `Please set them in Vercel dashboard under Settings > Environment Variables. ` +
+      `Current env keys: ${Object.keys(process.env).filter(k => k.includes('SUPABASE')).join(', ') || 'none'}`
+    );
+  }
+
+  return { supabaseUrl, supabaseAnonKey };
 }
 /**
  * Get the current authenticated user from the request
@@ -19,6 +40,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
  */
 export async function getUser(request?: NextRequest): Promise<User> {
   try {
+    // Get Supabase config (throws error if not available)
+    const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig();
+    
     // Get the authorization header from the request
     const authHeader = request?.headers.get('authorization');
     
