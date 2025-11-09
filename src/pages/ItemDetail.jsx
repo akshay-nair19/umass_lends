@@ -7,6 +7,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { UserAuth } from '../context/AuthContext';
 import { itemsAPI, borrowAPI, messagesAPI } from '../utils/api';
+import Notification from '../components/Notification';
+import { useNotification } from '../hooks/useNotification';
 // Note: You'll need to implement useRealtimeMessages hook or use the example
 // For now, we'll use a simpler approach with polling
 
@@ -26,9 +28,13 @@ const ItemDetail = () => {
     months: 0,
     days: 0,
     hours: 0,
+    minutes: 0,
   });
+  const [startTime, setStartTime] = useState('00:00'); // Start time (HH:MM)
+  const [exactReturnDateTime, setExactReturnDateTime] = useState(null); // Store exact return datetime
   const [submitting, setSubmitting] = useState(false);
   const [messageText, setMessageText] = useState('');
+  const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
 
   // Get today's date in local timezone (YYYY-MM-DD format)
   // This ensures users can select today's date regardless of their timezone
@@ -65,107 +71,116 @@ const ItemDetail = () => {
     }
   };
 
-  // Calculate end date from start date and duration
-  const calculateEndDate = (startDate, months, days, hours) => {
-    if (!startDate) return '';
+  // Calculate exact return datetime from start date, start time, and duration
+  const calculateExactReturnDateTime = (startDate, startTime, months, days, hours, minutes) => {
+    if (!startDate) return { endDate: '', exactDateTime: null };
     
-    // Parse the start date as a local date (avoid UTC timezone issues)
-    // Split the date string and create a date in local timezone
+    // Parse start date and start time
     const [year, month, day] = startDate.split('-').map(Number);
-    // Create date at noon to avoid any DST or timezone edge cases
-    const start = new Date(year, month - 1, day, 12, 0, 0, 0);
+    const [startHour, startMinute] = (startTime || '00:00').split(':').map(Number);
     
-    // Add duration in the correct order
-    // Add months first (using a copy to avoid mutation issues)
-    const endDate = new Date(start);
+    // Create start datetime in local timezone
+    const startDateTime = new Date(year, month - 1, day, startHour || 0, startMinute || 0, 0, 0);
     
-    if (months && months > 0) {
-      endDate.setMonth(endDate.getMonth() + months);
+    // Calculate exact return datetime by adding duration
+    const returnDateTime = new Date(startDateTime);
+    
+    // Add duration in order: months, days, hours, minutes
+    // Note: We add all values, even if 0, to ensure proper calculation
+    if (months) {
+      returnDateTime.setMonth(returnDateTime.getMonth() + months);
+    }
+    if (days) {
+      returnDateTime.setDate(returnDateTime.getDate() + days);
+    }
+    if (hours) {
+      returnDateTime.setHours(returnDateTime.getHours() + hours);
+    }
+    if (minutes) {
+      returnDateTime.setMinutes(returnDateTime.getMinutes() + minutes);
     }
     
-    // Then add days
-    if (days && days > 0) {
-      endDate.setDate(endDate.getDate() + days);
-    }
-    
-    // Then add hours (this might push to next day, which is correct)
-    if (hours && hours > 0) {
-      endDate.setHours(endDate.getHours() + hours);
-    }
-    
-    // Format as YYYY-MM-DD (date only for the API)
-    // Use UTC methods to get the date components to avoid timezone shifts
-    const endYear = endDate.getFullYear();
-    const endMonth = String(endDate.getMonth() + 1).padStart(2, '0');
-    const endDay = String(endDate.getDate()).padStart(2, '0');
-    
+    // Format end date as YYYY-MM-DD for API
+    const endYear = returnDateTime.getFullYear();
+    const endMonth = String(returnDateTime.getMonth() + 1).padStart(2, '0');
+    const endDay = String(returnDateTime.getDate()).padStart(2, '0');
     const calculatedEndDate = `${endYear}-${endMonth}-${endDay}`;
     
-    // Ensure end date is not before start date (safety check)
-    // Compare as strings (YYYY-MM-DD format allows string comparison)
+    // Store exact datetime as ISO string for countdown timer
+    // This preserves the exact time including hours and minutes
+    const exactDateTimeISO = returnDateTime.toISOString();
+    
+    // Ensure end date is not before start date
     if (calculatedEndDate < startDate) {
-      // This should never happen with proper duration, but if it does, return start date
       console.warn('Calculated end date is before start date, using start date as end date');
-      return startDate;
+      return { endDate: startDate, exactDateTime: startDateTime.toISOString() };
     }
     
-    return calculatedEndDate;
+    return { endDate: calculatedEndDate, exactDateTime: exactDateTimeISO };
   };
 
-  // Update end date when start date or duration changes
+  // Update end date and exact return datetime when start date, time, or duration changes
   useEffect(() => {
     if (borrowDates.startDate) {
-      const endDate = calculateEndDate(
+      const { endDate, exactDateTime } = calculateExactReturnDateTime(
         borrowDates.startDate,
+        startTime,
         duration.months,
         duration.days,
-        duration.hours
+        duration.hours,
+        duration.minutes
       );
       setBorrowDates(prev => ({ ...prev, endDate }));
+      setExactReturnDateTime(exactDateTime);
     }
-  }, [borrowDates.startDate, duration.months, duration.days, duration.hours]);
+  }, [borrowDates.startDate, startTime, duration.months, duration.days, duration.hours, duration.minutes]);
 
   // Handle borrow request
   const handleBorrowRequest = async (e) => {
     e.preventDefault();
     if (!session) {
-      alert('Please sign in to request to borrow');
+      showWarning('Please sign in to request to borrow');
       navigate('/signin');
       return;
     }
 
     if (!borrowDates.startDate) {
-      alert('Please select a start date');
+      showWarning('Please select a start date');
       return;
     }
 
     // Validate that end date is not before start date
     if (borrowDates.endDate && borrowDates.endDate < borrowDates.startDate) {
-      alert('Return deadline cannot be before the start date. Please adjust the duration.');
+      showError('Return deadline cannot be before the start date. Please adjust the duration.');
       return;
     }
-
-    // Allow same-day requests (all duration fields can be 0, end date will equal start date)
-    // But if user explicitly set duration to 0, that's also fine - it means same-day return
 
     try {
       setSubmitting(true);
       const response = await borrowAPI.submit(
         id,
         borrowDates.startDate,
-        borrowDates.endDate
+        borrowDates.endDate,
+        {
+          startTime: startTime || '00:00',
+          hours: duration.hours || 0,
+          minutes: duration.minutes || 0,
+          exactReturnDateTime: exactReturnDateTime || null,
+        }
       );
       
       if (response.success) {
-        alert('Borrow request submitted successfully!');
+        showSuccess('Borrow request submitted successfully!');
         setShowBorrowForm(false);
         setBorrowDates({ startDate: '', endDate: '' });
-        setDuration({ months: 0, days: 0, hours: 0 });
+        setDuration({ months: 0, days: 0, hours: 0, minutes: 0 });
+        setStartTime('00:00');
+        setExactReturnDateTime(null);
       } else {
-        alert(`Error: ${response.error}`);
+        showError(`Error: ${response.error}`);
       }
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      showError(`Error: ${err.message || 'Failed to submit borrow request'}`);
     } finally {
       setSubmitting(false);
     }
@@ -175,7 +190,7 @@ const ItemDetail = () => {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!session) {
-      alert('Please sign in to send a message');
+      showWarning('Please sign in to send a message');
       return;
     }
 
@@ -186,8 +201,9 @@ const ItemDetail = () => {
     try {
       await messagesAPI.send(id, messageText);
       setMessageText('');
+      // Message sent successfully - no need to show notification for every message
     } catch (err) {
-      alert(`Error sending message: ${err.message}`);
+      showError(`Error sending message: ${err.message || 'Failed to send message'}`);
     }
   };
 
@@ -229,6 +245,11 @@ const ItemDetail = () => {
   if (error || !item) {
     return (
       <div className="container mx-auto px-4 py-8">
+        <Notification
+          message={notification.message}
+          type={notification.type}
+          onClose={hideNotification}
+        />
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Error: {error || 'Item not found'}
         </div>
@@ -238,13 +259,19 @@ const ItemDetail = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <Notification
+        message={notification.message}
+        type={notification.type}
+        onClose={hideNotification}
+      />
+      
       {/* Back Button */}
-              <button
-                onClick={() => navigate(-1)}
-                className="mb-4 text-umass-maroon hover:text-umass-maroonDark font-medium transition-colors"
-              >
-                ← Back
-              </button>
+      <button
+        onClick={() => navigate(-1)}
+        className="mb-4 text-umass-maroon hover:text-umass-maroonDark font-medium transition-colors"
+      >
+        ← Back
+      </button>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Left Column - Item Details */}
@@ -312,10 +339,21 @@ const ItemDetail = () => {
                       min={minDate} // Allow today (local time) and future dates
                     />
                   </div>
+
+                  <div>
+                    <label className="block mb-2 font-medium">Start Time (Optional)</label>
+                    <input
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Default: 12:00 AM (midnight)</p>
+                  </div>
                   
                   <div>
                     <label className="block mb-2 font-medium">Borrow Duration</label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                       <div>
                         <label className="block text-sm text-gray-600 mb-1">Months</label>
                         <input
@@ -352,17 +390,30 @@ const ItemDetail = () => {
                           placeholder="0"
                         />
                       </div>
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-1">Minutes</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          value={duration.minutes}
+                          onChange={(e) => setDuration({ ...duration, minutes: parseInt(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 border rounded-lg"
+                          placeholder="0"
+                        />
+                      </div>
                     </div>
-                    {(duration.months > 0 || duration.days > 0 || duration.hours > 0) && (
+                    {(duration.months > 0 || duration.days > 0 || duration.hours > 0 || duration.minutes > 0) && (
                       <p className="text-sm text-gray-600 mt-2">
                         Duration: {duration.months > 0 && `${duration.months} month${duration.months !== 1 ? 's' : ''} `}
                         {duration.days > 0 && `${duration.days} day${duration.days !== 1 ? 's' : ''} `}
-                        {duration.hours > 0 && `${duration.hours} hour${duration.hours !== 1 ? 's' : ''}`}
+                        {duration.hours > 0 && `${duration.hours} hour${duration.hours !== 1 ? 's' : ''} `}
+                        {duration.minutes > 0 && `${duration.minutes} minute${duration.minutes !== 1 ? 's' : ''}`}
                       </p>
                     )}
                   </div>
 
-                  {borrowDates.endDate && (
+                  {exactReturnDateTime && (
                     <div className={`border rounded-lg p-3 ${
                       borrowDates.endDate < borrowDates.startDate 
                         ? 'bg-red-50 border-red-200' 
@@ -370,13 +421,16 @@ const ItemDetail = () => {
                         ? 'bg-yellow-50 border-yellow-200'
                         : 'bg-blue-50 border-blue-200'
                     }`}>
-                      <p className="text-sm font-medium text-gray-700 mb-1">Return Deadline:</p>
+                      <p className="text-sm font-medium text-gray-700 mb-1">Exact Return Deadline:</p>
                       <p className="text-lg font-bold text-umass-maroon">
-                        {new Date(borrowDates.endDate + 'T00:00:00').toLocaleDateString('en-US', {
+                        {new Date(exactReturnDateTime).toLocaleString('en-US', {
                           weekday: 'long',
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true,
                         })}
                       </p>
                       {borrowDates.endDate < borrowDates.startDate && (
@@ -384,7 +438,7 @@ const ItemDetail = () => {
                           ⚠️ Warning: Return deadline is before start date!
                         </p>
                       )}
-                      {borrowDates.endDate === borrowDates.startDate && (
+                      {borrowDates.endDate === borrowDates.startDate && (duration.months === 0 && duration.days === 0) && (
                         <p className="text-sm text-yellow-700 mt-2">
                           Same-day return requested
                         </p>
@@ -405,7 +459,9 @@ const ItemDetail = () => {
                       onClick={() => {
                         setShowBorrowForm(false);
                         setBorrowDates({ startDate: '', endDate: '' });
-                        setDuration({ months: 0, days: 0, hours: 0 });
+                        setDuration({ months: 0, days: 0, hours: 0, minutes: 0 });
+                        setStartTime('00:00');
+                        setExactReturnDateTime(null);
                       }}
                       className="px-6 py-3 border rounded-lg"
                     >

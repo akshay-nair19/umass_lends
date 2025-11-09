@@ -8,6 +8,9 @@ import { useNavigate, Link } from 'react-router-dom';
 import { UserAuth } from '../context/AuthContext';
 import { borrowAPI, itemsAPI } from '../utils/api';
 import CountdownTimer from '../components/CountdownTimer';
+import { calculateExactReturnDeadline } from '../utils/dateUtils';
+import Notification from '../components/Notification';
+import { useNotification } from '../hooks/useNotification';
 
 const BorrowRequests = () => {
   const navigate = useNavigate();
@@ -17,6 +20,7 @@ const BorrowRequests = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filterStatus, setFilterStatus] = useState('');
+  const { notification, showSuccess, showError, hideNotification } = useNotification();
 
   useEffect(() => {
     if (!session) {
@@ -64,13 +68,13 @@ const BorrowRequests = () => {
     try {
       const response = await borrowAPI.approve(requestId);
       if (response.success) {
-        alert('Request approved!');
+        showSuccess('Request approved!');
         loadRequests();
       } else {
-        alert(`Error: ${response.error}`);
+        showError(`Error: ${response.error}`);
       }
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      showError(`Error: ${err.message || 'Failed to approve request'}`);
     }
   };
 
@@ -78,13 +82,13 @@ const BorrowRequests = () => {
     try {
       const response = await borrowAPI.reject(requestId);
       if (response.success) {
-        alert('Request rejected');
+        showSuccess('Request rejected');
         loadRequests();
       } else {
-        alert(`Error: ${response.error}`);
+        showError(`Error: ${response.error}`);
       }
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      showError(`Error: ${err.message || 'Failed to reject request'}`);
     }
   };
 
@@ -125,6 +129,12 @@ const BorrowRequests = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <Notification
+        message={notification.message}
+        type={notification.type}
+        onClose={hideNotification}
+      />
+      
       <h1 className="text-3xl font-bold mb-6">Borrow Requests</h1>
 
       {/* Filter */}
@@ -157,8 +167,9 @@ const BorrowRequests = () => {
           <div className="space-y-4">
             {myRequestsAsBorrower.map((request) => {
               const item = items[request.item_id];
-              const returnDeadline = request.borrow_end_date && request.status === 'approved'
-                ? new Date(request.borrow_end_date + 'T23:59:59').toISOString()
+              // Calculate exact return deadline (only for approved requests)
+              const returnDeadline = request.status === 'approved' 
+                ? calculateExactReturnDeadline(request)
                 : null;
 
               return (
@@ -219,8 +230,9 @@ const BorrowRequests = () => {
             {myRequestsAsOwner.map((request) => {
               const item = items[request.item_id];
               const isOwner = request.owner_id === session.user?.id;
-              const returnDeadline = request.borrow_end_date && request.status === 'approved'
-                ? new Date(request.borrow_end_date + 'T23:59:59').toISOString()
+              // Calculate exact return deadline (only for approved requests)
+              const returnDeadline = request.status === 'approved'
+                ? calculateExactReturnDeadline(request)
                 : null;
 
               return (

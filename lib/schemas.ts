@@ -19,6 +19,11 @@ export const updateItemSchema = createItemSchema.partial();
 export const createBorrowRequestSchema = z.object({
   borrow_start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
   borrow_end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  // Optional fields for exact datetime calculation
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be in HH:MM format').optional(),
+  hours: z.number().int().min(0).max(23).optional(),
+  minutes: z.number().int().min(0).max(59).optional(),
+  exactReturnDateTime: z.string().datetime().optional(), // ISO 8601 datetime string
 }).refine((data) => {
   const start = new Date(data.borrow_start_date);
   const end = new Date(data.borrow_end_date);

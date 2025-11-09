@@ -82,17 +82,43 @@ export async function POST(
       );
     }
     
+    // Calculate return deadline datetime if exact datetime is provided
+    let returnDeadlineDatetime = null;
+    if (validatedData.exactReturnDateTime) {
+      returnDeadlineDatetime = validatedData.exactReturnDateTime;
+    } else if (validatedData.borrow_end_date) {
+      // Fallback: use end of end date if exact datetime not provided
+      returnDeadlineDatetime = `${validatedData.borrow_end_date}T23:59:59`;
+    }
+
+    // Prepare insert data
+    const insertData: any = {
+      item_id: itemId,
+      borrower_id: user.id,
+      owner_id: item.owner_id,
+      status: 'pending',
+      borrow_start_date: validatedData.borrow_start_date,
+      borrow_end_date: validatedData.borrow_end_date,
+    };
+
+    // Add optional duration fields if provided
+    if (validatedData.startTime) {
+      insertData.borrow_start_time = validatedData.startTime + ':00'; // Add seconds
+    }
+    if (validatedData.hours !== undefined) {
+      insertData.borrow_duration_hours = validatedData.hours;
+    }
+    if (validatedData.minutes !== undefined) {
+      insertData.borrow_duration_minutes = validatedData.minutes;
+    }
+    if (returnDeadlineDatetime) {
+      insertData.return_deadline_datetime = returnDeadlineDatetime;
+    }
+
     // Create borrow request
     const { data, error } = await supabase
       .from('borrow_requests')
-      .insert({
-        item_id: itemId,
-        borrower_id: user.id,
-        owner_id: item.owner_id,
-        status: 'pending',
-        borrow_start_date: validatedData.borrow_start_date,
-        borrow_end_date: validatedData.borrow_end_date,
-      })
+      .insert(insertData)
       .select()
       .single();
     

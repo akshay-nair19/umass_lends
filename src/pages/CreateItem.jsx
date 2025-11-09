@@ -36,7 +36,7 @@ const CreateItem = () => {
     e.preventDefault();
     
     if (!session) {
-      alert('Please sign in to create an item');
+      setError('Please sign in to create an item');
       navigate('/signin');
       return;
     }

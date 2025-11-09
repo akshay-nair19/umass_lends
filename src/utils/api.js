@@ -99,12 +99,13 @@ export const itemsAPI = {
 // Borrow Requests API
 export const borrowAPI = {
   // Submit borrow request
-  submit: (itemId, startDate, endDate) => {
+  submit: (itemId, startDate, endDate, durationMetadata = {}) => {
     return apiRequest(`/api/items/${itemId}/borrow`, {
       method: 'POST',
       body: JSON.stringify({
         borrow_start_date: startDate,
         borrow_end_date: endDate,
+        ...durationMetadata, // Include startTime, hours, minutes, exactReturnDateTime
       }),
     });
   },

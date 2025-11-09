@@ -30,6 +30,15 @@ export interface BorrowRequest {
   request_date?: string;
   borrow_start_date?: string;
   borrow_end_date?: string;
+  borrow_start_time?: string; // HH:MM:SS format
+  borrow_duration_hours?: number;
+  borrow_duration_minutes?: number;
+  return_deadline_datetime?: string; // ISO 8601 datetime string
+  // Added for displaying user names
+  borrower_name?: string;
+  borrower_email?: string;
+  owner_name?: string;
+  owner_email?: string;
 }
 
 export interface Message {
