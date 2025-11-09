@@ -170,10 +170,13 @@ export const borrowAPI = {
 // Messages API
 export const messagesAPI = {
   // Get messages for an item (requires authentication for private conversations)
-  getByItem: async (itemId) => {
+  getByItem: async (itemId, participantId = null) => {
     try {
       // Try authenticated request first
-      return await apiRequest(`/api/messages?itemId=${itemId}`);
+      const url = participantId 
+        ? `/api/messages?itemId=${itemId}&participantId=${participantId}`
+        : `/api/messages?itemId=${itemId}`;
+      return await apiRequest(url);
     } catch (error) {
       // If not authenticated or any other error, return empty messages
       // This allows the page to load even if user is not signed in
@@ -182,13 +185,24 @@ export const messagesAPI = {
     }
   },
 
+  // Get conversations list for an item (owner only)
+  getConversations: async (itemId) => {
+    try {
+      return await apiRequest(`/api/messages/conversations?itemId=${itemId}`);
+    } catch (error) {
+      console.log('Error fetching conversations (returning empty):', error.message);
+      return { success: true, data: [] };
+    }
+  },
+
   // Send message
-  send: (itemId, text) => {
+  send: (itemId, text, participantId = null) => {
     return apiRequest('/api/messages', {
       method: 'POST',
       body: JSON.stringify({
         item_id: itemId,
         text,
+        participant_id: participantId,
       }),
     });
   },

@@ -112,6 +112,46 @@ const ItemDetail = () => {
     loadItem();
   }, [id]);
 
+  // Load current user's profile picture and owner's profile picture
+  useEffect(() => {
+    const loadUserProfiles = async () => {
+      if (session?.user?.id) {
+        try {
+          // Load current user's profile picture
+          const userResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/users/${session.user.id}`, {
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+          });
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            if (userData.success && userData.data?.profile_picture_url) {
+              setCurrentUserProfilePic(userData.data.profile_picture_url);
+            }
+          }
+        } catch (error) {
+          console.log('Could not load user profile picture:', error);
+        }
+      }
+      
+      // Load owner's profile picture if item is loaded and user is not the owner
+      if (item?.owner_id && session?.user?.id !== item.owner_id) {
+        try {
+          const ownerResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/users/${item.owner_id}`);
+          if (ownerResponse.ok) {
+            const ownerData = await ownerResponse.json();
+            if (ownerData.success && ownerData.data?.profile_picture_url) {
+              setOwnerProfilePic(ownerData.data.profile_picture_url);
+            }
+          }
+        } catch (error) {
+          console.log('Could not load owner profile picture:', error);
+        }
+      }
+    };
+    loadUserProfiles();
+  }, [session, item]);
+
   // Calculate isOwner and isAvailable (must be defined before useEffect that uses them)
   const isOwner = session && item && session.user?.id === item.owner_id;
   const isAvailable = item?.available;
@@ -331,8 +371,15 @@ const ItemDetail = () => {
     }
 
     try {
-      await messagesAPI.send(id, messageText);
+      // For owners, include participant_id if a conversation is selected
+      const participantId = isOwner && selectedParticipantId ? selectedParticipantId : null;
+      await messagesAPI.send(id, messageText, participantId);
       setMessageText('');
+      // Reload messages and conversations to update UI
+      loadMessages();
+      if (isOwner) {
+        loadConversations();
+      }
       // Message sent successfully - no need to show notification for every message
     } catch (err) {
       showError(`Error sending message: ${err.message || 'Failed to send message'}`);
@@ -341,18 +388,87 @@ const ItemDetail = () => {
 
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(true);
+  const [conversations, setConversations] = useState([]);
+  const [conversationsLoading, setConversationsLoading] = useState(true);
+  const [selectedParticipantId, setSelectedParticipantId] = useState(null);
+  const [selectedParticipantName, setSelectedParticipantName] = useState(null);
+  const [currentUserProfilePic, setCurrentUserProfilePic] = useState(null);
+  const [ownerProfilePic, setOwnerProfilePic] = useState(null);
 
-  // Load messages
+  // Load conversations list (for owners)
+  // Note: isOwner is already declared earlier in the file
   useEffect(() => {
+    if (isOwner && item) {
+      loadConversations();
+      // Poll for new conversations every 3 seconds
+      const interval = setInterval(loadConversations, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [id, isOwner, item]);
+
+  const loadConversations = async () => {
+    if (!isOwner || !item) return;
+    try {
+      const response = await messagesAPI.getConversations(id);
+      if (response && response.success) {
+        const conversationsData = response.data || [];
+        setConversations(conversationsData);
+        // Auto-select first conversation if none selected
+        if (!selectedParticipantId && conversationsData.length > 0) {
+          setSelectedParticipantId(conversationsData[0].participant_id);
+          setSelectedParticipantName(conversationsData[0].participant_name);
+        }
+        // Update the selected participant name if it exists in the new data
+        if (selectedParticipantId) {
+          const selectedConv = conversationsData.find(c => c.participant_id === selectedParticipantId);
+          if (selectedConv?.participant_name) {
+            setSelectedParticipantName(selectedConv.participant_name);
+          }
+        }
+      }
+    } catch (err) {
+      console.log('Error loading conversations:', err.message || err);
+    } finally {
+      setConversationsLoading(false);
+    }
+  };
+
+  // Update selected participant name when conversations or messages change
+  useEffect(() => {
+    if (selectedParticipantId && !selectedParticipantName) {
+      // Try to get name from conversations
+      const conversation = conversations.find(c => c.participant_id === selectedParticipantId);
+      if (conversation?.participant_name) {
+        setSelectedParticipantName(conversation.participant_name);
+        return;
+      }
+      // Try to get name from messages
+      if (messages.length > 0) {
+        const participantMessage = messages.find(m => m.sender_id === selectedParticipantId);
+        if (participantMessage?.sender_name) {
+          setSelectedParticipantName(participantMessage.sender_name);
+          return;
+        }
+        if (participantMessage?.sender_email) {
+          setSelectedParticipantName(participantMessage.sender_email);
+        }
+      }
+    }
+  }, [selectedParticipantId, conversations, messages, selectedParticipantName]);
+
+  // Load messages for selected conversation
+  useEffect(() => {
+    if (!item) return;
     loadMessages();
     // Poll for new messages every 2 seconds (or use realtime)
     const interval = setInterval(loadMessages, 2000);
     return () => clearInterval(interval);
-  }, [id]);
+  }, [id, selectedParticipantId, item, isOwner]);
 
   const loadMessages = async () => {
+    if (!item) return;
     try {
-      const response = await messagesAPI.getByItem(id);
+      const response = await messagesAPI.getByItem(id, isOwner ? selectedParticipantId : null);
       if (response && response.success) {
         setMessages(response.data || []);
       } else {
@@ -393,7 +509,7 @@ const ItemDetail = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="container mx-auto px-2 py-6 max-w-7xl">
       <Notification
         message={notification.message}
         type={notification.type}
@@ -773,83 +889,471 @@ const ItemDetail = () => {
           }}
         />
 
-        {/* Right Column - Messages */}
-        <div>
-          <h2 className="text-2xl font-bold mb-4">
-            {session?.user?.id === item.owner_id ? 'All Conversations' : 'Private Conversation'}
-          </h2>
-          {session?.user?.id !== item.owner_id && (
-            <p className="text-sm text-gray-600 mb-2">
-              This is a private conversation between you and the item owner. Other users cannot see your messages.
-            </p>
-          )}
-
-          {/* Messages List */}
-          <div className="border rounded-lg p-4 mb-4 h-64 overflow-y-auto">
-            {messagesLoading ? (
-              <p>Loading messages...</p>
-            ) : messages.length === 0 ? (
-              <p className="text-gray-500">No messages yet.</p>
-            ) : (
-              <div className="space-y-4">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`p-3 rounded ${
-                      message.sender_id === session?.user?.id
-                        ? 'bg-umass-maroon text-umass-cream ml-8'
-                        : 'bg-umass-lightGray text-umass-gray mr-8'
-                    }`}
-                  >
-                    <p className="text-xs font-semibold mb-1 opacity-80">
-                      {message.sender_id === session?.user?.id 
-                        ? 'You' 
-                        : (message.sender_name || message.sender_email || 'Unknown User')}
-                    </p>
-                    <p>{message.text}</p>
-                    <p className="text-xs opacity-70 mt-1">
-                      {new Date(message.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                ))}
+        {/* Messages Section */}
+        {isOwner ? (
+          /* Owner View: Conversations List + Selected Conversation - Messenger Style */
+          <div className="flex mt-6 -mx-2 h-[700px] border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm">
+            {/* Left: Conversations List */}
+            <div className="w-80 border-r border-gray-200 bg-white flex flex-col flex-shrink-0">
+              <div className="p-4 border-b border-gray-200 bg-gray-50">
+                <h2 className="text-lg font-semibold text-gray-900">Conversations</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {conversations.length} {conversations.length === 1 ? 'conversation' : 'conversations'}
+                </p>
               </div>
-            )}
-          </div>
+              <div className="flex-1 overflow-y-auto">
+                {conversationsLoading ? (
+                  <div className="p-6 text-center">
+                    <p className="text-gray-500 text-sm">Loading conversations...</p>
+                  </div>
+                ) : conversations.length === 0 ? (
+                  <div className="p-6 text-center">
+                    <p className="text-gray-500 text-sm">No conversations yet.</p>
+                    <p className="text-gray-400 text-xs mt-2">Wait for borrowers to message you</p>
+                  </div>
+                ) : (
+                  <div>
+                    {conversations.map((conversation) => (
+                      <button
+                        key={conversation.participant_id}
+                        onClick={() => {
+                          setSelectedParticipantId(conversation.participant_id);
+                          setSelectedParticipantName(conversation.participant_name);
+                          loadConversations();
+                        }}
+                        className={`w-full text-left p-3 hover:bg-gray-50 transition-colors border-b border-gray-100 ${
+                          selectedParticipantId === conversation.participant_id
+                            ? 'bg-blue-50 border-l-4 border-l-umass-maroon'
+                            : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex-shrink-0 relative">
+                            {conversation.participant_profile_picture_url ? (
+                              <img
+                                src={conversation.participant_profile_picture_url}
+                                alt={conversation.participant_name}
+                                className="w-12 h-12 rounded-full object-cover border-2 border-gray-200"
+                                onError={(e) => {
+                                  // Fallback to initial if image fails to load
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'flex';
+                                }}
+                              />
+                            ) : null}
+                            <div 
+                              className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-semibold bg-umass-maroon text-white ${
+                                conversation.participant_profile_picture_url ? 'hidden' : ''
+                              }`}
+                              style={{ display: conversation.participant_profile_picture_url ? 'none' : 'flex' }}
+                            >
+                              {conversation.participant_name.charAt(0).toUpperCase()}
+                            </div>
+                            {conversation.unread_count > 0 && (
+                              <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center border-2 border-white">
+                                <span className="text-[10px] font-bold text-white">
+                                  {conversation.unread_count > 9 ? '9+' : conversation.unread_count}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <p className="font-semibold truncate text-sm text-gray-900">
+                                {conversation.participant_name}
+                              </p>
+                            </div>
+                            <p className="text-xs truncate text-gray-600">
+                              {conversation.last_message_text || 'No messages yet'}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
 
-          {/* Send Message Form */}
-          {session ? (
-            <>
-              {session?.user?.id === item.owner_id && messages.length === 0 ? (
-                <div className="bg-blue-50 border border-blue-300 text-blue-700 px-4 py-3 rounded">
-                  <p className="text-sm font-semibold mb-1">No conversations yet</p>
-                  <p className="text-xs">
-                    Wait for a borrower to message you first, or you can message them from their borrow request on the "Requests" page.
-                  </p>
+            {/* Right: Selected Conversation - Messenger Style */}
+            <div className="flex-1 min-w-0 bg-white flex flex-col">
+              {selectedParticipantId ? (
+                <>
+                  {/* Conversation Header */}
+                  <div className="p-4 border-b border-gray-200 bg-white flex items-center gap-3">
+                    {(() => {
+                      const conversation = conversations.find(c => c.participant_id === selectedParticipantId);
+                      const profilePic = conversation?.participant_profile_picture_url;
+                      const name = selectedParticipantName || conversation?.participant_name || 'User';
+                      return (
+                        <>
+                          <div className="flex-shrink-0">
+                            {profilePic ? (
+                              <img
+                                src={profilePic}
+                                alt={name}
+                                className="w-10 h-10 rounded-full object-cover"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'flex';
+                                }}
+                              />
+                            ) : null}
+                            <div 
+                              className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold bg-umass-maroon text-white ${
+                                profilePic ? 'hidden' : ''
+                              }`}
+                              style={{ display: profilePic ? 'none' : 'flex' }}
+                            >
+                              {name.charAt(0).toUpperCase()}
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h2 className="text-base font-semibold text-gray-900 truncate">
+                              {name}
+                            </h2>
+                            <p className="text-xs text-gray-500">Active now</p>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                  
+                  {/* Messages List */}
+                  <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+                    {messagesLoading ? (
+                      <div className="flex items-center justify-center h-full">
+                        <p className="text-gray-500">Loading messages...</p>
+                      </div>
+                    ) : messages.length === 0 ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center">
+                          <p className="text-gray-500 mb-2">No messages yet.</p>
+                          <p className="text-gray-400 text-sm">Start the conversation!</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {messages.map((message, index) => {
+                          const isOwnMessage = message.sender_id === session?.user?.id;
+                          const prevMessage = index > 0 ? messages[index - 1] : null;
+                          const nextMessage = index < messages.length - 1 ? messages[index + 1] : null;
+                          const sameSender = prevMessage && prevMessage.sender_id === message.sender_id;
+                          const showTimestamp = !nextMessage || nextMessage.sender_id !== message.sender_id || 
+                                              new Date(nextMessage.created_at).getTime() - new Date(message.created_at).getTime() > 300000; // 5 minutes
+                          
+                          // Get the other participant's name and profile picture
+                          let senderName, senderProfilePic;
+                          if (isOwnMessage) {
+                            senderName = 'You';
+                            senderProfilePic = currentUserProfilePic || message.sender_profile_picture_url || null;
+                          } else {
+                            const conversation = conversations.find(c => c.participant_id === selectedParticipantId);
+                            senderName = conversation?.participant_name || 
+                                        message.sender_name || 
+                                        message.sender_email || 
+                                        'Unknown User';
+                            senderProfilePic = conversation?.participant_profile_picture_url || 
+                                             message.sender_profile_picture_url || 
+                                             null;
+                          }
+                          
+                          return (
+                            <div
+                              key={message.id}
+                              className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} items-end gap-2 ${sameSender ? 'mt-0.5' : 'mt-3'}`}
+                            >
+                              {!isOwnMessage && (
+                                <div className="flex-shrink-0 w-8 h-8 mb-1">
+                                  {sameSender ? (
+                                    <div className="w-8"></div>
+                                  ) : senderProfilePic ? (
+                                    <img
+                                      src={senderProfilePic}
+                                      alt={senderName}
+                                      className="w-8 h-8 rounded-full object-cover"
+                                      onError={(e) => {
+                                        e.target.style.display = 'none';
+                                        e.target.nextSibling.style.display = 'flex';
+                                      }}
+                                    />
+                                  ) : null}
+                                  <div 
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold bg-umass-maroon text-white ${
+                                      sameSender || senderProfilePic ? 'hidden' : ''
+                                    }`}
+                                    style={{ display: (sameSender || senderProfilePic) ? 'none' : 'flex' }}
+                                  >
+                                    {senderName.charAt(0).toUpperCase()}
+                                  </div>
+                                </div>
+                              )}
+                              <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[65%]`}>
+                                {!sameSender && !isOwnMessage && (
+                                  <p className="text-xs font-semibold text-gray-700 mb-1 px-1">
+                                    {senderName}
+                                  </p>
+                                )}
+                                <div className={`rounded-2xl px-4 py-2 ${
+                                  isOwnMessage
+                                    ? 'bg-umass-maroonLight text-gray-900 border-2 border-umass-maroon'
+                                    : 'bg-white text-gray-900 border border-gray-200'
+                                }`}>
+                                  <p className="text-sm leading-relaxed break-words text-gray-900 font-medium">
+                                    {message.text}
+                                  </p>
+                                </div>
+                                {showTimestamp && (
+                                  <p className="text-xs text-gray-500 mt-1 px-1">
+                                    {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </p>
+                                )}
+                              </div>
+                              {isOwnMessage && (
+                                <div className="flex-shrink-0 w-8 h-8 mb-1">
+                                  {sameSender ? (
+                                    <div className="w-8"></div>
+                                  ) : senderProfilePic ? (
+                                    <img
+                                      src={senderProfilePic}
+                                      alt="You"
+                                      className="w-8 h-8 rounded-full object-cover"
+                                      onError={(e) => {
+                                        e.target.style.display = 'none';
+                                        e.target.nextSibling.style.display = 'flex';
+                                      }}
+                                    />
+                                  ) : null}
+                                  <div 
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold bg-gray-400 text-white ${
+                                      sameSender || senderProfilePic ? 'hidden' : ''
+                                    }`}
+                                    style={{ display: (sameSender || senderProfilePic) ? 'none' : 'flex' }}
+                                  >
+                                    Y
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Send Message Form */}
+                  {session && (
+                    <div className="p-4 border-t border-gray-200 bg-white">
+                      <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={messageText}
+                          onChange={(e) => setMessageText(e.target.value)}
+                          placeholder="Type a message..."
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-umass-maroon focus:border-transparent transition-all"
+                        />
+                        <button
+                          type="submit"
+                          className="bg-umass-maroon text-white px-6 py-2 rounded-full hover:bg-umass-maroonDark font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                          disabled={!messageText.trim()}
+                        >
+                          Send
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full min-h-[600px]">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                    </div>
+                    <p className="text-gray-500 font-medium">Select a conversation</p>
+                    <p className="text-gray-400 text-sm mt-1">Choose a conversation from the list to view messages</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Borrower View: Single Conversation - Messenger Style */
+          <div className="mt-6 h-[600px] border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm flex flex-col">
+            {/* Conversation Header */}
+            <div className="p-4 border-b border-gray-200 bg-white flex items-center gap-3">
+              <div className="flex-shrink-0">
+                {ownerProfilePic ? (
+                  <img
+                    src={ownerProfilePic}
+                    alt={item.owner_name || 'Item Owner'}
+                    className="w-10 h-10 rounded-full object-cover"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                <div 
+                  className={`w-10 h-10 rounded-full bg-umass-maroon flex items-center justify-center text-sm font-semibold text-white ${
+                    ownerProfilePic ? 'hidden' : ''
+                  }`}
+                  style={{ display: ownerProfilePic ? 'none' : 'flex' }}
+                >
+                  {item.owner_name ? item.owner_name.charAt(0).toUpperCase() : 'O'}
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base font-semibold text-gray-900 truncate">
+                  {item.owner_name || 'Item Owner'}
+                </h2>
+                <p className="text-xs text-gray-500">Private conversation</p>
+              </div>
+            </div>
+
+            {/* Messages List */}
+            <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+              {messagesLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-gray-500">Loading messages...</p>
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <p className="text-gray-500 mb-2">No messages yet.</p>
+                    <p className="text-gray-400 text-sm">Start the conversation!</p>
+                  </div>
                 </div>
               ) : (
-                <form onSubmit={handleSendMessage} className="flex gap-2">
+                <div className="space-y-2">
+                  {messages.map((message, index) => {
+                    const isOwnMessage = message.sender_id === session?.user?.id;
+                    const prevMessage = index > 0 ? messages[index - 1] : null;
+                    const nextMessage = index < messages.length - 1 ? messages[index + 1] : null;
+                    const sameSender = prevMessage && prevMessage.sender_id === message.sender_id;
+                    const showTimestamp = !nextMessage || nextMessage.sender_id !== message.sender_id || 
+                                        new Date(nextMessage.created_at).getTime() - new Date(message.created_at).getTime() > 300000; // 5 minutes
+                    
+                    const senderName = isOwnMessage 
+                      ? 'You' 
+                      : (message.sender_name || message.sender_email || item.owner_name || 'Item Owner');
+                    const senderProfilePic = isOwnMessage 
+                      ? (currentUserProfilePic || message.sender_profile_picture_url || null)
+                      : (message.sender_profile_picture_url || ownerProfilePic || null);
+                    
+                    return (
+                      <div
+                        key={message.id}
+                        className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} items-end gap-2 ${sameSender ? 'mt-0.5' : 'mt-3'}`}
+                      >
+                        {!isOwnMessage && (
+                          <div className="flex-shrink-0 w-8 h-8 mb-1">
+                            {sameSender ? (
+                              <div className="w-8"></div>
+                            ) : senderProfilePic ? (
+                              <img
+                                src={senderProfilePic}
+                                alt={senderName}
+                                className="w-8 h-8 rounded-full object-cover"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'flex';
+                                }}
+                              />
+                            ) : null}
+                            <div 
+                              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold bg-umass-maroon text-white ${
+                                sameSender || senderProfilePic ? 'hidden' : ''
+                              }`}
+                              style={{ display: (sameSender || senderProfilePic) ? 'none' : 'flex' }}
+                            >
+                              {senderName.charAt(0).toUpperCase()}
+                            </div>
+                          </div>
+                        )}
+                        <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[65%]`}>
+                          {!sameSender && !isOwnMessage && (
+                            <p className="text-xs font-semibold text-gray-700 mb-1 px-1">
+                              {senderName}
+                            </p>
+                          )}
+                          <div className={`rounded-2xl px-4 py-2 ${
+                            isOwnMessage
+                              ? 'bg-umass-maroonLight text-gray-900 border-2 border-umass-maroon'
+                              : 'bg-white text-gray-900 border border-gray-200'
+                          }`}>
+                            <p className="text-sm leading-relaxed break-words text-gray-900 font-medium">
+                              {message.text}
+                            </p>
+                          </div>
+                          {showTimestamp && (
+                            <p className="text-xs text-gray-500 mt-1 px-1">
+                              {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          )}
+                        </div>
+                        {isOwnMessage && (
+                          <div className="flex-shrink-0 w-8 h-8 mb-1">
+                            {sameSender ? (
+                              <div className="w-8"></div>
+                            ) : senderProfilePic ? (
+                              <img
+                                src={senderProfilePic}
+                                alt="You"
+                                className="w-8 h-8 rounded-full object-cover"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'flex';
+                                }}
+                              />
+                            ) : null}
+                            <div 
+                              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold bg-gray-400 text-white ${
+                                sameSender || senderProfilePic ? 'hidden' : ''
+                              }`}
+                              style={{ display: (sameSender || senderProfilePic) ? 'none' : 'flex' }}
+                            >
+                              Y
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Send Message Form */}
+            {session ? (
+              <div className="p-4 border-t border-gray-200 bg-white">
+                <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                   <input
                     type="text"
                     value={messageText}
                     onChange={(e) => setMessageText(e.target.value)}
                     placeholder="Type a message..."
-                    className="flex-1 px-4 py-2 border rounded-lg"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-umass-maroon focus:border-transparent transition-all"
                   />
                   <button
                     type="submit"
-                    className="bg-umass-maroon text-umass-cream px-6 py-2 rounded-lg hover:bg-umass-maroonDark font-semibold transition-colors"
+                    className="bg-umass-maroon text-white px-6 py-2 rounded-full hover:bg-umass-maroonDark font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    disabled={!messageText.trim()}
                   >
                     Send
                   </button>
                 </form>
-              )}
-            </>
-          ) : (
-            <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded">
-              Please sign in to send a message.
-            </div>
-          )}
-        </div>
+              </div>
+            ) : (
+              <div className="p-4 border-t border-gray-200 bg-yellow-50">
+                <p className="text-yellow-800 text-sm text-center">
+                  Please sign in to send a message.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

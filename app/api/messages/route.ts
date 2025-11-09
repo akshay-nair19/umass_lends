@@ -195,6 +195,9 @@ export async function GET(request: NextRequest) {
       return addCorsHeaders(response);
     }
     
+    // Check if participantId is provided (for owner to view specific conversation)
+    const participantId = searchParams.get('participantId');
+    
     const validatedQuery = messagesQuerySchema.parse({ itemId });
     
     const supabase = getSupabaseClient();
@@ -218,7 +221,7 @@ export async function GET(request: NextRequest) {
     let messagesQuery;
     
     if (user.id === item.owner_id) {
-      // Owner sees all conversations (all messages for the item)
+      // Owner: fetch all messages for the item (filter by participantId in memory if needed)
       messagesQuery = supabase
         .from('messages')
         .select('*')
@@ -255,6 +258,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Filter messages for borrowers to show only their conversation with the owner
+    // For owners with participantId, messages are already filtered by query
     let filteredMessages = messages;
     if (user.id !== item.owner_id) {
       // Borrower: only show messages where they are involved with the owner
@@ -266,6 +270,17 @@ export async function GET(request: NextRequest) {
           (msg.sender_id === item.owner_id && msg.participant_id === user.id)
         );
       });
+    } else if (participantId && user.id === item.owner_id) {
+      // Owner viewing specific conversation: filter messages to show only this conversation
+      filteredMessages = messages.filter((msg: any) => {
+        // Message belongs to this conversation if:
+        // - Owner sent it to this participant, OR
+        // - Participant sent it to owner
+        return (
+          (msg.sender_id === user.id && msg.participant_id === participantId) ||
+          (msg.sender_id === participantId && msg.participant_id === user.id)
+        );
+      });
     }
     
     // Get all unique sender IDs
@@ -274,10 +289,10 @@ export async function GET(request: NextRequest) {
       senderIds.add(msg.sender_id);
     });
     
-    // Fetch user information for all sender IDs
+    // Fetch user information for all sender IDs (including profile pictures)
     const { data: users, error: usersError } = await supabase
       .from('users')
-      .select('id, email, name')
+      .select('id, email, name, profile_picture_url')
       .in('id', Array.from(senderIds));
     
     if (usersError) {
@@ -286,9 +301,9 @@ export async function GET(request: NextRequest) {
     }
     
     // Create a map of user ID to user info
-    const usersMap = new Map<string, { name?: string; email?: string }>();
+    const usersMap = new Map<string, { name?: string; email?: string; profile_picture_url?: string }>();
     users?.forEach((u: any) => {
-      usersMap.set(u.id, { name: u.name, email: u.email });
+      usersMap.set(u.id, { name: u.name, email: u.email, profile_picture_url: u.profile_picture_url });
     });
     
     // Transform the data to include sender information
@@ -299,6 +314,7 @@ export async function GET(request: NextRequest) {
         ...message,
         sender_name: sender?.name || sender?.email || 'Unknown User',
         sender_email: sender?.email || '',
+        sender_profile_picture_url: sender?.profile_picture_url || null,
       };
     });
     
