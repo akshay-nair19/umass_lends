@@ -5,31 +5,39 @@ import { supabase } from '../supabaseClient';
 
 // Support both Vite (import.meta.env) and Next.js (process.env) environments
 const getApiBase = () => {
+  let apiUrl = '';
+  
   // Check for explicit API URL in environment variables (production)
   try {
     if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) {
-      return import.meta.env.VITE_API_URL;
+      apiUrl = import.meta.env.VITE_API_URL;
     }
   } catch (e) {
     // import.meta not available
   }
   
-  try {
-    if (typeof process !== 'undefined' && process.env) {
-      if (process.env.NEXT_PUBLIC_API_URL) {
-        return process.env.NEXT_PUBLIC_API_URL;
+  if (!apiUrl) {
+    try {
+      if (typeof process !== 'undefined' && process.env) {
+        if (process.env.NEXT_PUBLIC_API_URL) {
+          apiUrl = process.env.NEXT_PUBLIC_API_URL;
+        } else if (process.env.VITE_API_URL) {
+          apiUrl = process.env.VITE_API_URL;
+        }
       }
-      if (process.env.VITE_API_URL) {
-        return process.env.VITE_API_URL;
-      }
+    } catch (e) {
+      // process not available
     }
-  } catch (e) {
-    // process not available
   }
   
   // Default to localhost for development
-  // In production, VITE_API_URL must be set via environment variables
-  return 'http://localhost:3000';
+  if (!apiUrl) {
+    apiUrl = 'http://localhost:3000';
+  }
+  
+  // Normalize URL: remove trailing slash to prevent double slashes
+  // Example: "https://example.com/" -> "https://example.com"
+  return apiUrl.replace(/\/+$/, '');
 };
 
 const API_BASE = getApiBase();
